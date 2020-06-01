@@ -1,10 +1,10 @@
+import os
 import socket
 import sys
 import time
 
-
 NUM_BYTES = 1000
-CHUNK_SIZE = 4096
+CHUNK_SIZE = 2**15
 
 def run_client(ip_addr, port, num_bytes):
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
@@ -27,17 +27,20 @@ def run_server(ip_addr, port, num_bytes):
     s.listen()
     while True:
         (sock, address) = s.accept()
+        print("Incoming connection from {}".format(address))
         b_sent = 0
         data = os.urandom(num_bytes)
         while b_sent < num_bytes:
-            sock.send(data[b_sent:min(b_sent+CHUNK_SIZE, num_bytes)])
+            n_bytes = min(num_bytes-b_sent, CHUNK_SIZE)
+            sock.send(data[b_sent:b_sent+n_bytes])
+            b_sent += n_bytes
         sock.close()
     
 if __name__ == "__main__":
     if len(sys.argv) == 1:
         print("Usage: 'server <listen-ip> <port> [num-bytes]' or 'client <server-ip> <server-port> [num-bytes]'")
         sys.exit(1)
-    num_bytes = int(sys.argv[4]) if len(sys.argv) >= 3 else NUM_BYTES
+    num_bytes = int(sys.argv[4]) if len(sys.argv) > 4 else NUM_BYTES
     if sys.argv[1] == 'server':
         run_server(sys.argv[2], int(sys.argv[3]), num_bytes)
     elif sys.argv[1] == 'client':
