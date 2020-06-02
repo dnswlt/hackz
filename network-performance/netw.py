@@ -21,12 +21,18 @@ server and requests one of the following measurement protocols:
 """
 
 import argparse
+import logging
 from math import ceil
 import os
+import re
 import socket
 import struct
 import sys
 import time
+
+
+# Timeout to use for server and client sockets.
+TIMEOUT_SECONDS = 5.0
 
 
 def parse_args():
@@ -39,11 +45,25 @@ def parse_args():
         help="Specifies the test to run. 'shutdown' kills the server.")
     p.add_argument("-b", "--chunk_size", default=4096, type=int,
         help="Number of bytes to send per packet.")
-    p.add_argument("-n", "--num_bytes", default=4096, type=int,
+    p.add_argument("-n", "--num_bytes", default=4096,
         help="Total number of bytes to send in a 'throughput' test.")
-    p.add_argument("-k", "--num_packets", default=500, type=int,
+    p.add_argument("-k", "--num_packets", default=500,
         help="Total number of packets to send in a 'latency' test.")
     return p.parse_args()
+
+
+def parse_unit(unit):
+    """Reads a number and an optional unit suffix. Both k/M/G and ki/Mi/Gi are supported."""
+    units = {
+        'k': 1e3, 'm': 1e6, 'g': 1e9,
+        'ki': 2**10, 'mi': 2**20, 'gi': 2**30,
+    }
+    if re.match(r"\d+$", unit):
+        return int(unit)
+    mo = re.match(r"(\d+)([kmg]i?)$", unit.lower())
+    if mo:
+        return int(mo.group(1)) * int(units[mo.group(2)])
+    raise ValueError("Not a valid unit: %s" % unit)
 
 
 def fmt_bytes(n_bytes):
@@ -148,7 +168,7 @@ def recv_pings(sock, num_pings, packet_size):
 
 def run_throughput(host, port, num_bytes, chunk_size):
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.settimeout(5.0)
+        sock.settimeout(TIMEOUT_SECONDS)
         sock.connect((host, port))
         print("Connected to %s:%d" % (host, port))
         sock.send(b'SPDT')
@@ -167,7 +187,7 @@ def run_throughput(host, port, num_bytes, chunk_size):
 
 def run_latency(host, port, num_pings, packet_size):
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.settimeout(5.0)
+        sock.settimeout(TIMEOUT_SECONDS)
         sock.connect((host, port))
         print("Connected to %s:%d" % (host, port))
         sock.send(b'LATN')
@@ -191,68 +211,69 @@ def run_server(host, port):
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.bind((host, port))
         s.listen(1)
-        print("Listening on %s:%d" % (host, port))
+        logging.info("Listening on %s:%d", host, port)
         while True:
             (sock, address) = s.accept()
-            print("Incoming connection from {}".format(address))
+            logging.info("Incoming connection from %s:%d", *address)
             try:
                 with sock:
-                    sock.settimeout(5.0)
+                    sock.settimeout(TIMEOUT_SECONDS)
                     try:
                         cmd = sock.recv(4)
                     except socket.timeout as e:
-                        print("Client did not send a command in time:", e)
+                        logging.info("Client did not send a command in time: %s", e)
                         continue
                     if cmd == b'SPDT':
                         num_bytes_send = recv_int64(sock)
                         num_bytes_recv = recv_int64(sock)
                         chunk_size = recv_int64(sock)
-                        print(("Starting speed test with parameters "
+                        logging.info("Starting speed test with parameters "
                             f"num_bytes_send={num_bytes_send}"
                             f", num_bytes_recv={num_bytes_recv}"
-                            f", chunk_size={chunk_size}"))
+                            f", chunk_size={chunk_size}")
                         try:
                             send_data(sock, num_bytes_send, chunk_size)
                         except socket.timeout as e:
-                            print("Timeout while sending data:", e)
+                            logging.error("Timeout while sending data: %s", e)
                             continue
                         try:
                             recv_data(sock, num_bytes_recv, chunk_size)
                         except socket.timeout as e:
-                            print("Timeout while receiving data:", e)
+                            logging.error("Timeout while receiving data: %s", e)
                             continue
                     elif cmd == b'SHUT':
-                        print("Received SHUT command. Shutting down.")
+                        logging.info("Received SHUT command. Shutting down.")
                         return
                     elif cmd == b'LATN':
                         num_pings_send = recv_int64(sock)
                         num_pings_recv = recv_int64(sock)
                         packet_size = recv_int64(sock)
-                        print(("Starting latency test with parameters "
+                        logging.info("Starting latency test with parameters "
                             f"packet_size={packet_size}"
                             f", num_pings_send={num_pings_send}"
-                            f", num_pings_recv={num_pings_recv}"))
+                            f", num_pings_recv={num_pings_recv}")
                         try:
                             send_pings(sock, num_pings_send, packet_size)
                         except socket.timeout as e:
-                            print("Timeout while sending pings:", e)
+                            logging.error("Timeout while sending pings: %s", e)
                             continue
                         try:
                             recv_pings(sock, num_pings_recv, packet_size)
                         except socket.timeout as e:
-                            print("Timeout while receiving pings:", e)
+                            logging.error("Timeout while receiving pings: %s", e)
                             continue
             except OSError as e:
-                print("An error occurred:", e)
+                logging.error("An error occurred: %s", e)
                 
                 
 if __name__ == "__main__":
     args = parse_args()
+    logging.basicConfig(format="%(asctime)s %(thread)d %(levelname)s %(message)s", level=logging.DEBUG)
     if args.mode == "server":
         run_server(args.host, args.port)
     elif args.command == "throughput":
-        run_throughput(args.host, args.port, args.num_bytes, args.chunk_size)
+        run_throughput(args.host, args.port, parse_unit(args.num_bytes), args.chunk_size)
     elif args.command == "shutdown":
         run_shutdown(args.host, args.port)
     elif args.command == "latency":
-        run_latency(args.host, args.port, args.num_packets, args.chunk_size)
+        run_latency(args.host, args.port, parse_unit(args.num_packets), args.chunk_size)
