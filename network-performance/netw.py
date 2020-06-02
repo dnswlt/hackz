@@ -31,13 +31,18 @@ import time
 
 def parse_args():
     p = argparse.ArgumentParser(description="Network speed measurement utility.")
-    p.add_argument("-s", "--host", default="localhost")
+    p.add_argument("-s", "--host", default="localhost", help="Hostname or IP to connect to (in client mode) or to listen on (in server mode).")
     p.add_argument("-p", "--port", default=10101, type=int)
-    p.add_argument("-m", "--mode", default="client", choices=["client", "server"])
-    p.add_argument("-c", "--command", default="throughput", choices=["throughput", "latency", "shutdown"])
-    p.add_argument("-z", "--chunk_size", default=4096, type=int)
-    p.add_argument("-n", "--num_bytes", default=4096, type=int)
-    p.add_argument("-k", "--num_packets", default=500, type=int)
+    p.add_argument("-m", "--mode", default="client", choices=["client", "server"], 
+        help="Mode to run in. Start one side as the server and then run tests from the other side as a client.")
+    p.add_argument("-c", "--command", default="throughput", choices=["throughput", "latency", "shutdown"],
+        help="Specifies the test to run. 'shutdown' kills the server.")
+    p.add_argument("-b", "--chunk_size", default=4096, type=int,
+        help="Number of bytes to send per packet.")
+    p.add_argument("-n", "--num_bytes", default=4096, type=int,
+        help="Total number of bytes to send in a 'throughput' test.")
+    p.add_argument("-k", "--num_packets", default=500, type=int,
+        help="Total number of packets to send in a 'latency' test.")
     return p.parse_args()
 
 
@@ -54,27 +59,22 @@ def fmt_thrpt(bps):
 
 
 def recv_int64(sock):
-    data = sock.recv(8)
-    return struct.unpack('!q', data)[0]
+    buf = bytearray(8)
+    n_read = 0
+    while n_read < 8:
+        n_read += sock.recv_into(buf, 8 - n_read)
+    return struct.unpack('!q', buf)[0]
 
 
 def send_int64(sock, n):
     data = struct.pack('!q', n)
-    sock.send(data)
-
-
-def send_data(sock, num_bytes, chunk_size):
-    sent_total = 0
-    data = b'\x00' * chunk_size
-    t_start = time.time()
-    while sent_total < num_bytes:
-        n_bytes = min(num_bytes - sent_total, chunk_size)
-        n_sent = sock.send(data[:n_bytes])
-        sent_total += n_sent
-    return time.time() - t_start
+    n_sent = 0
+    while n_sent < 8:
+        n_sent += sock.send(data[n_sent:])
 
 
 def stats(ts):
+    """Returns a dict with summary stats for given list of (time) measurements."""
     ts = sorted(ts)
     return {
         'count': len(ts),
@@ -92,33 +92,56 @@ def fmt_stats(stats):
         '\n'.join('  %s: %.1fms' % (k, v * 1000) for k, v in stats.items() if k != 'count'))
 
 
+def send_data(sock, num_bytes, chunk_size):
+    sent_total = 0
+    data = b'\x00' * chunk_size
+    t_start = time.time()
+    while sent_total < num_bytes:
+        n_bytes = min(num_bytes - sent_total, chunk_size)
+        n_sent = sock.send(data[:n_bytes])
+        sent_total += n_sent
+    return time.time() - t_start
+
+
 def recv_data(sock, num_bytes, chunk_size):
     received_total = 0
-    t_start = time.time()
+    t_start = time.perf_counter()
     data = bytearray(chunk_size)
     while received_total < num_bytes:
         n_bytes = sock.recv_into(data, min(chunk_size, num_bytes - received_total))
         received_total += n_bytes
-    return time.time() - t_start
+    return time.perf_counter() - t_start
+
+
+def recvall_into(sock, buf):
+    """Receive exactly num_bytes of data."""
+    num_bytes = len(buf)
+    n_read = 0
+    buf = memoryview(buf)
+    while n_read < num_bytes:
+        n_read += sock.recv_into(buf[n_read:])
+    return bytes(buf)
 
 
 def send_pings(sock, num_pings, packet_size):
     data = b'\x00' * packet_size
     ts = []
-    for i in range(num_pings):
+    buf = bytearray(packet_size)
+    for _ in range(num_pings):
         t_start = time.perf_counter()
-        sock.send(data)
-        sock.recv(packet_size)
+        sock.sendall(data)
+        recvall_into(sock, buf)
         ts.append(time.perf_counter() - t_start)
     return stats(ts)
     
     
 def recv_pings(sock, num_pings, packet_size):
     ts = []
-    for i in range(num_pings):
+    buf = bytearray(packet_size)
+    for _ in range(num_pings):
         t_start = time.perf_counter()
-        data = sock.recv(packet_size)
-        sock.send(data)
+        data = recvall_into(sock, buf)
+        sock.sendall(data)
         ts.append(time.perf_counter() - t_start)
     return stats(ts)
 
@@ -184,7 +207,7 @@ def run_server(host, port):
                         num_bytes_send = recv_int64(sock)
                         num_bytes_recv = recv_int64(sock)
                         chunk_size = recv_int64(sock)
-                        print(("Starting speed test with parameters"
+                        print(("Starting speed test with parameters "
                             f"num_bytes_send={num_bytes_send}"
                             f", num_bytes_recv={num_bytes_recv}"
                             f", chunk_size={chunk_size}"))
@@ -205,7 +228,7 @@ def run_server(host, port):
                         num_pings_send = recv_int64(sock)
                         num_pings_recv = recv_int64(sock)
                         packet_size = recv_int64(sock)
-                        print(("Starting latency test with parameters"
+                        print(("Starting latency test with parameters "
                             f"packet_size={packet_size}"
                             f", num_pings_send={num_pings_send}"
                             f", num_pings_recv={num_pings_recv}"))
