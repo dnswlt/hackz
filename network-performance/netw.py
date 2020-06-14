@@ -270,6 +270,13 @@ def listen_multicast(multicast_addr, server_addr):
         
 
 def discover_servers(multicast_addr):
+    """Sends a DSCO IPv4 multicast discovery message to discover available servers.
+
+    The response of a server contains its hostname and the port it listens on. 
+    It must match the format
+    [4 bytes][N bytes     ][4 bytes   ]
+    [b"HELO"][str hostname][int32 port]
+    """
     print("Discovering servers...")
     num_found = 0
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
@@ -300,8 +307,8 @@ def discover_servers(multicast_addr):
         print("No servers found.")
 
         
-def run_server(host, port, multicast=True):
-    if multicast:
+def run_server(host, port, discoverable=True):
+    if discoverable:
         multicast_thread = threading.Thread(target=listen_multicast, 
             args=(IPV4_MULTICAST_ADDRESS, (host, port)), daemon=True)
         multicast_thread.start()
@@ -369,7 +376,7 @@ if __name__ == "__main__":
     if args.discover:
         discover_servers(IPV4_MULTICAST_ADDRESS)
     elif args.mode == "server":
-        run_server(args.host, args.port, multicast=not args.no_multicast)
+        run_server(args.host, args.port, discoverable=not args.no_multicast)
     elif args.command == "throughput":
         run_throughput(args.host, args.port, parse_unit(args.num_bytes), args.chunk_size)
     elif args.command == "shutdown":
