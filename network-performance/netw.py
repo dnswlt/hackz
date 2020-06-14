@@ -38,7 +38,7 @@ IPV4_MULTICAST_ADDRESS = ('224.0.0.199', 10199)
 
 def parse_args():
     p = argparse.ArgumentParser(description="Network speed measurement utility.")
-    p.add_argument("-s", "--host", default="localhost", help="Hostname or IP to connect to (in client mode) or to listen on (in server mode).")
+    p.add_argument("-s", "--host", default="0.0.0.0", help="Hostname or IP to connect to (in client mode) or to listen on (in server mode).")
     p.add_argument("-p", "--port", default=10101, type=int)
     p.add_argument("-m", "--mode", default="client", choices=["client", "server"], 
         help="Mode to run in. Start one side as the server and then run tests from the other side as a client.")
@@ -244,19 +244,20 @@ def listen_multicast(multicast_addr, server_addr):
         server_addr: a (host, port) tuple for this server's address.
     """
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.bind(('', multicast_addr[1]))
-    multicast_group = socket.inet_aton(multicast_addr[0])
+    # Bind to same address that we listen to for measurements.
+    server_host, server_port = server_addr
+    multicast_host, multicast_port = multicast_addr
+    sock.bind((server_host, multicast_port))
     sock.setsockopt(socket.IPPROTO_IP,
         socket.IP_ADD_MEMBERSHIP,
-        struct.pack('4sL', multicast_group, socket.INADDR_ANY))
+        struct.pack('4s4s', socket.inet_aton(multicast_host),
+                    socket.inet_aton(server_host)))
     max_errors = 1000
     while max_errors > 0:
         try:
             data, client_addr = sock.recvfrom(64)
             if data == b'DSCO':
-                msg = (b'HELO' + 
-                       encode_str(server_addr[0]) + 
-                       encode_int32(server_addr[1]))
+                msg = (b'HELO' + encode_int32(server_port))
                 sock.sendto(msg, client_addr)
             else:
                 logging.info("Ignoring invalid packet: %s", data)
@@ -274,18 +275,17 @@ def discover_servers(multicast_addr):
         sock.sendto(b'DSCO', multicast_addr)
         while True:
             try:
-                data, _ = sock.recvfrom(1024)
+                data, server_addr = sock.recvfrom(1024)
             except socket.timeout:
                 break
             except OSError as e:
                 print("Failed to receive multicast response:", e)
                 break
             else:
-                if data[:4] == b'HELO':
+                if len(data) == 8 and data[:4] == b'HELO':
                     try:
-                        server_host, n_bytes = decode_str(data[4:])
-                        server_port = decode_int32(data[4+n_bytes:])
-                        print("  Found server at -s %s -p %d" % (server_host, server_port))
+                        server_port = decode_int32(data[4:])
+                        print("  Found server at -s %s -p %d" % (server_addr[0], server_port))
                         num_found += 1
                     except struct.error as e:
                         print("Could not unpack payload of HELO message:", data)
