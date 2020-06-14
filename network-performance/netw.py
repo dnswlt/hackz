@@ -257,7 +257,9 @@ def listen_multicast(multicast_addr, server_addr):
         try:
             data, client_addr = sock.recvfrom(64)
             if data == b'DSCO':
-                msg = (b'HELO' + encode_int32(server_port))
+                msg = (b'HELO' + 
+                       encode_str(socket.gethostname()) + 
+                       encode_int32(server_port))
                 sock.sendto(msg, client_addr)
             else:
                 logging.info("Ignoring invalid packet: %s", data)
@@ -282,15 +284,18 @@ def discover_servers(multicast_addr):
                 print("Failed to receive multicast response:", e)
                 break
             else:
-                if len(data) == 8 and data[:4] == b'HELO':
+                if data[:4] == b'HELO':
                     try:
-                        server_port = decode_int32(data[4:])
-                        print("  Found server at -s %s -p %d" % (server_addr[0], server_port))
+                        server_hostname, n_bytes = decode_str(data[4:])
+                        server_port = decode_int32(data[4+n_bytes:])
+                        print("  Found server '%s' at -s %s -p %d" % 
+                                (server_hostname, server_addr[0], server_port))
                         num_found += 1
                     except struct.error as e:
-                        print("Could not unpack payload of HELO message:", data)
+                        print("Could not unpack payload of HELO message from %s: %s" %
+                                (server_addr[0], data))
                 else:
-                    print("Received funny response from server:", data[:64])
+                    print("Received funny response from %s: %s" % (server_addr[0], data[:64]))
     if num_found == 0:
         print("No servers found.")
 
