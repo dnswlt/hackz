@@ -38,7 +38,7 @@ IPV4_MULTICAST_ADDRESS = ('224.0.0.199', 10199)
 
 def parse_args():
     p = argparse.ArgumentParser(description="Network speed measurement utility.")
-    p.add_argument("-s", "--host", default="0.0.0.0", help="Hostname or IP to connect to (in client mode) or to listen on (in server mode).")
+    p.add_argument("-s", "--host", default="", help="Hostname or IP to connect to (in client mode) or to listen on (in server mode).")
     p.add_argument("-p", "--port", default=10101, type=int)
     p.add_argument("-m", "--mode", default="client", choices=["client", "server"], 
         help="Mode to run in. Start one side as the server and then run tests from the other side as a client.")
@@ -374,6 +374,9 @@ def run_server(host, port, discoverable=True):
                 
 if __name__ == "__main__":
     args = parse_args()
+    if not args.host:
+        # Unset host means default.
+        args.host = "0.0.0.0" if args.mode == "server" else "localhost"
     logging.basicConfig(format="%(asctime)s %(thread)d %(levelname)s %(message)s", level=logging.DEBUG)
     if args.discover:
         discover_servers(IPV4_MULTICAST_ADDRESS)
