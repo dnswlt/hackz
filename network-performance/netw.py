@@ -1,7 +1,7 @@
 """Network speed measurement utility.
 
-This script allows to measure the network throughput between
-two hosts. One plays the role of the server (i.e., it accepts
+This script allows to measure the network throughput and latency
+between two hosts. One plays the role of the server (i.e., it accepts
 connections from one client at a time, but keeps running);
 the other plays the role of the client that connects to the 
 server and requests one of the following measurement protocols:
@@ -11,13 +11,13 @@ server and requests one of the following measurement protocols:
 [4 bytes][8 bytes           ][8 bytes             ][8 bytes         ]
 [b"SPDM"][int64 num_bytes up][int64 num_bytes down][int64 chunk_size]
 
-(2) Shutdown server
-[4 bytes]
-[b"SHUT"]
-
-(3) Latency measurement
+(2) Latency measurement
 [4 bytes][8 bytes           ][8 bytes             ][8 bytes          ]
 [b"LATN"][int64 num pings up][int64 num pings down][int64 packet size]
+
+(3) Shutdown server
+[4 bytes]
+[b"SHUT"]
 """
 
 import argparse
@@ -28,12 +28,13 @@ import re
 import socket
 import struct
 import sys
+import threading
 import time
 
 
 # Timeout to use for server and client sockets.
 TIMEOUT_SECONDS = 5.0
-
+IPV4_MULTICAST_ADDRESS = ('224.0.0.199', 10199)
 
 def parse_args():
     p = argparse.ArgumentParser(description="Network speed measurement utility.")
@@ -45,10 +46,14 @@ def parse_args():
         help="Specifies the test to run. 'shutdown' kills the server.")
     p.add_argument("-b", "--chunk_size", default=4096, type=int,
         help="Number of bytes to send per packet.")
-    p.add_argument("-n", "--num_bytes", default=4096,
+    p.add_argument("-n", "--num_bytes", default='4096',
         help="Total number of bytes to send in a 'throughput' test.")
-    p.add_argument("-k", "--num_packets", default=500,
+    p.add_argument("-k", "--num_packets", default='500',
         help="Total number of packets to send in a 'latency' test.")
+    p.add_argument("--discover", action="store_true",
+        help="Try to discover a server using IPv4 multicast, print results and exit.")
+    p.add_argument("--no-multicast", action="store_true",
+        help="Disable IPv4 multicast discovery (applies to server mode only).")
     return p.parse_args()
 
 
@@ -76,6 +81,30 @@ def fmt_bytes(n_bytes):
 
 def fmt_thrpt(bps):
     return f"{fmt_bytes(bps)}/s"
+
+
+def encode_int32(n):
+    return struct.pack("!i", n)
+
+
+def decode_int32(data):
+    return struct.unpack("!i", data[:4])[0]
+
+
+def encode_str(s):
+    """Returns the utf-8 length-prefix encoded byte string of s."""
+    b = s.encode('utf-8')
+    return encode_int32(len(b)) + b
+
+
+def decode_str(data):
+    """Decodes a length-prefix encoded string from data.
+
+    Returns a tuple (s, bytes_consumed).
+    """
+    n_bytes = decode_int32(data)
+    s_bytes = struct.unpack("!%ds" % n_bytes, data[4:4 + n_bytes])[0]
+    return (s_bytes.decode('utf-8'), 4 + n_bytes)
 
 
 def recv_int64(sock):
@@ -206,8 +235,71 @@ def run_shutdown(host, port):
         print("Connected to %s:%d" % (host, port))
         sock.send(b'SHUT')
 
+def listen_multicast(multicast_addr, server_addr):
+    """Listens for 'DSCO' (discovery) messages on multicast_addr.
+    Responds with this server's server_addr.
+
+    Args:
+        multicast_addr: a (host, port) tuple for the Multicast address.
+        server_addr: a (host, port) tuple for this server's address.
+    """
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.bind(('', multicast_addr[1]))
+    multicast_group = socket.inet_aton(multicast_addr[0])
+    sock.setsockopt(socket.IPPROTO_IP,
+        socket.IP_ADD_MEMBERSHIP,
+        struct.pack('4sL', multicast_group, socket.INADDR_ANY))
+    max_errors = 1000
+    while max_errors > 0:
+        try:
+            data, client_addr = sock.recvfrom(64)
+            if data == b'DSCO':
+                msg = (b'HELO' + 
+                       encode_str(server_addr[0]) + 
+                       encode_int32(server_addr[1]))
+                sock.sendto(msg, client_addr)
+            else:
+                logging.info("Ignoring invalid packet: %s", data)
+        except OSError as e:
+            logging.error("Error receiving IPv4 discovery multicast packet: %s", e)
+            max_errors -= 1
+    logging.error("Too many errors. Giving up on IPv4 discovery.")
         
-def run_server(host, port):
+
+def discover_servers(multicast_addr):
+    print("Discovering servers...")
+    num_found = 0
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+        sock.settimeout(TIMEOUT_SECONDS)
+        sock.sendto(b'DSCO', multicast_addr)
+        while True:
+            try:
+                data, _ = sock.recvfrom(1024)
+            except socket.timeout:
+                break
+            except OSError as e:
+                print("Failed to receive multicast response:", e)
+                break
+            else:
+                if data[:4] == b'HELO':
+                    try:
+                        server_host, n_bytes = decode_str(data[4:])
+                        server_port = decode_int32(data[4+n_bytes:])
+                        print("  Found server at -s %s -p %d" % (server_host, server_port))
+                        num_found += 1
+                    except struct.error as e:
+                        print("Could not unpack payload of HELO message:", data)
+                else:
+                    print("Received funny response from server:", data[:64])
+    if num_found == 0:
+        print("No servers found.")
+
+        
+def run_server(host, port, multicast=True):
+    if multicast:
+        multicast_thread = threading.Thread(target=listen_multicast, 
+            args=(IPV4_MULTICAST_ADDRESS, (host, port)), daemon=True)
+        multicast_thread.start()
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.bind((host, port))
         s.listen(1)
@@ -269,8 +361,10 @@ def run_server(host, port):
 if __name__ == "__main__":
     args = parse_args()
     logging.basicConfig(format="%(asctime)s %(thread)d %(levelname)s %(message)s", level=logging.DEBUG)
-    if args.mode == "server":
-        run_server(args.host, args.port)
+    if args.discover:
+        discover_servers(IPV4_MULTICAST_ADDRESS)
+    elif args.mode == "server":
+        run_server(args.host, args.port, multicast=not args.no_multicast)
     elif args.command == "throughput":
         run_throughput(args.host, args.port, parse_unit(args.num_bytes), args.chunk_size)
     elif args.command == "shutdown":
