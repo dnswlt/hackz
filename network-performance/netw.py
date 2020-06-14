@@ -144,12 +144,13 @@ def fmt_stats(stats):
 def send_data(sock, num_bytes, chunk_size):
     sent_total = 0
     data = b'\x00' * chunk_size
-    t_start = time.time()
+    t_start = time.perf_counter()
     while sent_total < num_bytes:
         n_bytes = min(num_bytes - sent_total, chunk_size)
         n_sent = sock.send(data[:n_bytes])
         sent_total += n_sent
-    return time.time() - t_start
+    sock.recv(4)  # receive b'DONE'
+    return time.perf_counter() - t_start
 
 
 def recv_data(sock, num_bytes, chunk_size):
@@ -159,6 +160,7 @@ def recv_data(sock, num_bytes, chunk_size):
     while received_total < num_bytes:
         n_bytes = sock.recv_into(data, min(chunk_size, num_bytes - received_total))
         received_total += n_bytes
+    sock.send(b'DONE')
     return time.perf_counter() - t_start
 
 
