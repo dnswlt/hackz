@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html>
+
+<body>
+    <!--
+        What does it mean to "randomly" distribute points across the surface of a cirlce?
+
+        Here are some ways to do it.
+    -->
+    <canvas id="myCanvas" width="800" height="800" style="border:1px solid #d3d3d3;">
+        Your browser does not support the HTML canvas tag.</canvas>
+
+    <script>
+        function RandomPoint(cx, cy, rad) {
+            while (true) {
+                var x = 1 - 2 * Math.random();
+                var y = 1 - 2 * Math.random();
+                if (x * x + y * y <= 1) {
+                    return {
+                        "x": cx + rad * x,
+                        "y": cy + rad * y,
+                    };
+                }
+            }
+        }
+
+
+        function RandomPointArcSection(cx, cy, rad) {
+            var phi1 = 2 * Math.PI * Math.random();
+            var phi2 = 2 * Math.PI * Math.random();
+            var x1 = Math.cos(phi1) * rad;
+            var y1 = Math.sin(phi1) * rad;
+            var x2 = Math.cos(phi2) * rad;
+            var y2 = Math.sin(phi2) * rad;
+            var alpha = Math.random();
+            var mx = x1 + (x2 - x1) * alpha;
+            var my = y1 + (y2 - y1) * alpha;
+            return {
+                "x": cx + mx,
+                "y": cy + my,
+            };
+        }
+
+        function RandomPointRadiusAngle(cx, cy, rad) {
+            // Triangular distribution of the radius:
+            var r = rad * (1 - Math.abs(Math.random() - Math.random()));
+            var phi = 2 * Math.PI * Math.random();
+            return {
+                "x": cx + Math.cos(phi) * r,
+                "y": cy + Math.sin(phi) * r,
+            };
+        }
+
+        var c = document.getElementById("myCanvas");
+        var ctx = c.getContext("2d");
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(400, 400, 300, 0, 2 * Math.PI);
+        ctx.stroke();
+        for (var i = 0; i < 20000; i++) {
+            var p = RandomPointArcSection(400, 400, 300);
+            ctx.beginPath();
+            ctx.strokeStyle = "#ff0000"
+            ctx.moveTo(p.x - 2, p.y - 2);
+            ctx.lineTo(p.x + 2, p.y + 2);
+            ctx.moveTo(p.x - 2, p.y + 2);
+            ctx.lineTo(p.x + 2, p.y - 2);
+            // 800, 800)
+            ctx.stroke();
+        }
+    </script>
+
+</body>
+
+</html>
