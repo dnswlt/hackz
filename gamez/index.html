@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Gamez!</title>
+</head>
+
+<body>
+    <div>
+        <canvas id="canvas" width="700" height="600"></canvas>
+    </div>
+    <div id="controls">
+        <button id="reset">Reset</button>
+    </div>
+
+    <script type="text/javascript">
+        function hexagon(a) {
+            let p = new Path2D();
+            let b2 = Math.sqrt(3) * a / 2;
+            let a2 = a / 2
+            p.moveTo(b2, a2);
+            p.lineTo(0, a);
+            p.lineTo(-b2, a2);
+            p.lineTo(-b2, -a2);
+            p.lineTo(0, -a);
+            p.lineTo(b2, -a2);
+            p.lineTo(b2, a2);
+            return {
+                path: p,
+                sideLength: a,
+                selected: false,
+                x: 0,
+                y: 0,
+            };
+        }
+
+        function drawBbox(ctx) {
+            ctx.rect(0, 0, canvas.width, canvas.height);
+            ctx.strokeStyle = "#000000";
+            ctx.stroke();
+        }
+
+        function drawHexagons(ctx) {
+            for (const fld of gstate.fields) {
+                ctx.translate(fld.x, fld.y);
+                if (fld.selected) {
+                    ctx.fillStyle = "#00ff00";
+                    ctx.fill(fld.path);
+                }
+                ctx.strokeStyle = "#00aa00";
+                ctx.stroke(fld.path);
+                // Undo transform.
+                ctx.translate(-fld.x, -fld.y);
+            }
+        }
+
+        function redraw(ctx) {
+            ctx.resetTransform();
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawBbox(ctx);
+            ctx.translate(pad, pad);
+            drawHexagons(ctx);
+        }
+
+        function initialize() {
+            const c = document.getElementById("canvas");
+            const ctx = canvas.getContext("2d");
+            let a = 30;
+            let b = Math.sqrt(3) * a;
+            let nRows = 11;
+            for (let i = 0; i < nRows; i++) {
+                let nCols = (i % 2 == 0) ? 12 : 11;
+                for (let j = 0; j < nCols; j++) {
+                    let xOff = (i % 2 == 0) ? 0 : b / 2;
+                    let hex = hexagon(a);
+                    hex.x = xOff + j * b + b / 2;
+                    hex.y = i * a * 3 / 2 + a;
+                    gstate.fields.push(hex);
+                }
+            }
+            redraw(ctx);
+
+            canvas.addEventListener('click', function (event) {
+                ctx.translate(pad, pad);
+                let found = false;
+                for (const fld of gstate.fields) {
+                    ctx.save();
+                    ctx.translate(fld.x, fld.y);
+                    if (ctx.isPointInPath(fld.path, event.offsetX, event.offsetY)) {
+                        fld.selected = !fld.selected;
+                        break;
+                    }
+                    ctx.restore();
+                }
+                redraw(ctx);
+            });
+            document.getElementById("reset").onclick = clear;
+        }
+
+        function clear() {
+            console.log("Redrawing");
+            const c = document.getElementById("canvas");
+            const ctx = canvas.getContext("2d");
+            for (let fld of gstate.fields) {
+                fld.selected = false;
+            }
+            redraw(ctx);
+        }
+
+        const pad = 10;
+
+        var gstate = {
+            fields: [],
+        };
+
+        initialize();
+
+    </script>
+</body>
+
+</html>
