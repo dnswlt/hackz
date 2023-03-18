@@ -5,6 +5,23 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Gamez!</title>
+    <script type="text/javascript">
+        async function postSomething() {
+            console.log("postSomething");
+            const response = await fetch("/hexz/move", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    move: 123,
+                }),
+            })
+            let resp = await response.json();
+            console.log(resp);
+            return resp;
+        }
+    </script>
 </head>
 
 <body>
@@ -13,6 +30,7 @@
     </div>
     <div id="controls">
         <button id="reset">Reset</button>
+        <button id="postSth" onclick="postSomething()">Post Sth</button>
     </div>
 
     <script type="text/javascript">
@@ -104,6 +122,15 @@
                 redraw(ctx);
             });
             document.getElementById("reset").onclick = reset;
+
+            const evtSource = new EventSource("/hexz/sse");
+            evtSource.onmessage = (event) => {
+                const msg = JSON.parse(event.data);
+                console.log("Server-sent event: ", msg);
+            }
+            evtSource.onerror = (err) => {
+                console.error("EventSource failed:", err);
+            }
         }
 
         function clickedOnField(fld) {
