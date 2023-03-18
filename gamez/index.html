@@ -30,14 +30,19 @@
             return {
                 path: p,
                 sideLength: a,
-                selected: false,
+                value: 0,
                 x: 0,
                 y: 0,
             };
         }
 
         function drawBbox(ctx) {
-            ctx.rect(0, 0, canvas.width, canvas.height);
+            let b = Math.sqrt(3) * hexagonSideLength;
+            let width = numFieldsHorizontally * b + 2 * pad;
+            let a2 = 2 * Math.floor((numFieldsVertically + 1) / 2);
+            let a = Math.floor(numFieldsVertically / 2);
+            let height = (a + a2) * hexagonSideLength + 2 * pad;
+            ctx.rect(0, 0, width, height);
             ctx.strokeStyle = "#000000";
             ctx.stroke();
         }
@@ -45,11 +50,12 @@
         function drawHexagons(ctx) {
             for (const fld of gstate.fields) {
                 ctx.translate(fld.x, fld.y);
-                if (fld.selected) {
-                    ctx.fillStyle = "#00ff00";
+                if (fld.value != 0) {
+                    let p = fld.value > 0 ? 0 : 1;
+                    ctx.fillStyle = styles.colors.players[p];
                     ctx.fill(fld.path);
                 }
-                ctx.strokeStyle = "#00aa00";
+                ctx.strokeStyle = styles.colors.grid;
                 ctx.stroke(fld.path);
                 // Undo transform.
                 ctx.translate(-fld.x, -fld.y);
@@ -67,11 +73,11 @@
         function initialize() {
             const c = document.getElementById("canvas");
             const ctx = canvas.getContext("2d");
-            let a = 30;
+            let a = hexagonSideLength;
             let b = Math.sqrt(3) * a;
-            let nRows = 11;
+            let nRows = numFieldsVertically;
             for (let i = 0; i < nRows; i++) {
-                let nCols = (i % 2 == 0) ? 12 : 11;
+                let nCols = (i % 2 == 0) ? numFieldsHorizontally : numFieldsHorizontally - 1;
                 for (let j = 0; j < nCols; j++) {
                     let xOff = (i % 2 == 0) ? 0 : b / 2;
                     let hex = hexagon(a);
@@ -83,36 +89,58 @@
             redraw(ctx);
 
             canvas.addEventListener('click', function (event) {
+                ctx.resetTransform();
                 ctx.translate(pad, pad);
                 let found = false;
                 for (const fld of gstate.fields) {
-                    ctx.save();
                     ctx.translate(fld.x, fld.y);
                     if (ctx.isPointInPath(fld.path, event.offsetX, event.offsetY)) {
-                        fld.selected = !fld.selected;
+                        clickedOnField(fld);
+                        ctx.translate(-fld.x, -fld.y);
                         break;
                     }
-                    ctx.restore();
+                    ctx.translate(-fld.x, -fld.y);
                 }
                 redraw(ctx);
             });
-            document.getElementById("reset").onclick = clear;
+            document.getElementById("reset").onclick = reset;
         }
 
-        function clear() {
-            console.log("Redrawing");
+        function clickedOnField(fld) {
+            if (fld.value != 0) {
+                return;
+            }
+            fld.value = gstate.turn;
+            gstate.turn = -gstate.turn;
+        }
+
+        function reset() {
             const c = document.getElementById("canvas");
             const ctx = canvas.getContext("2d");
             for (let fld of gstate.fields) {
-                fld.selected = false;
+                fld.value = 0;
             }
+            gstate.turn = 1;
+            gstate.moves = [];
             redraw(ctx);
         }
 
-        const pad = 10;
+        const hexagonSideLength = 30;
+        const numFieldsHorizontally = 10;
+        const numFieldsVertically = 11;
+        const pad = 20;
+
+        const styles = {
+            colors: {
+                grid: '#000000',
+                players: ['#255ab4', '#f8d748'],
+            },
+        };
 
         var gstate = {
             fields: [],
+            moves: [],
+            turn: 1,
         };
 
         initialize();
