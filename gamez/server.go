@@ -24,6 +24,11 @@ var (
 	ongoingGamesMut sync.Mutex
 )
 
+const (
+	numFieldsFirstRow = 10
+	numBoardRows      = 11
+)
+
 func readGameHtml() (string, error) {
 	html, err := os.ReadFile(*gameHtmlFile)
 	if err != nil {
@@ -37,7 +42,9 @@ type Game struct {
 	ControlChan chan ControlEvent // The channel to communicate with the game coordinating goroutine.
 }
 
-type ControlEvent interface{}
+type ControlEvent interface {
+	controlEventImpl() // Interface marker function
+}
 
 type ControlEventRegister struct {
 	PlayerId  string
@@ -47,6 +54,16 @@ type ControlEventRegister struct {
 type ControlEventUnregister struct {
 	PlayerId string
 }
+
+type ControlEventMove struct {
+	PlayerId string
+	Row      int
+	Col      int
+}
+
+func (e ControlEventRegister) controlEventImpl()   {}
+func (e ControlEventUnregister) controlEventImpl() {}
+func (e ControlEventMove) controlEventImpl()       {}
 
 func (g *Game) addEventListener(playerId string) chan ServerEvent {
 	ch := make(chan chan ServerEvent)
@@ -80,6 +97,79 @@ func NewGame(id string) *Game {
 	}
 }
 
+func NewBoard() *Board {
+	fields := make([][]Field, numBoardRows)
+	for i := 0; i < len(fields); i++ {
+		n := numFieldsFirstRow - i%2
+		fields[i] = make([]Field, n)
+	}
+	return &Board{
+		Turn:   1, // Player 1 begins
+		Fields: fields,
+	}
+}
+
+// Controller function for a running game. To be executed by a dedicated goroutine.
+func gameMaster(game *Game) {
+	const numPlayers = 2
+	eventListeners := make(map[string]chan ServerEvent)
+	board := NewBoard()
+	players := make(map[string]int)
+	broadcast := func(e ServerEvent) {
+		e.Timestamp = time.Now().Format(time.RFC3339)
+		for _, ch := range eventListeners {
+			ch <- e
+		}
+	}
+	for {
+		tick := time.After(5 * time.Second)
+		select {
+		case ce := <-game.ControlChan:
+			switch e := ce.(type) {
+			case ControlEventRegister:
+				if ch, ok := eventListeners[e.PlayerId]; ok {
+					e.ReplyChan <- ch
+				} else {
+					// The first two participants in the game are players.
+					// Anyone arriving later will be a spectator.
+					if len(players) < numPlayers {
+						players[e.PlayerId] = len(players) + 1
+					}
+					ch := make(chan ServerEvent)
+					eventListeners[e.PlayerId] = ch
+					e.ReplyChan <- ch
+				}
+			case ControlEventUnregister:
+				delete(eventListeners, e.PlayerId)
+				delete(players, e.PlayerId)
+				if len(eventListeners) == 0 {
+					// No more listeners left: end the game.
+					log.Printf("Game %s has no listeners left. Finishing.", game.Id)
+					return
+				}
+			case ControlEventMove:
+				playerNum, ok := players[e.PlayerId]
+				if !ok || board.Turn != playerNum {
+					// Only allow moves by players whose turn it is.
+					break
+				}
+				if e.Row < 0 || e.Row >= len(board.Fields) || e.Col < 0 || e.Col >= len(board.Fields[e.Row]) {
+					break
+				}
+				board.Fields[e.Row][e.Col].Value = 1
+				board.Fields[e.Row][e.Col].Owner = playerNum
+				board.Turn++
+				if board.Turn > numPlayers {
+					board.Turn = 1
+				}
+				broadcast(ServerEvent{Board: board})
+			}
+		case <-tick:
+			broadcast(ServerEvent{DebugMessage: "ping"})
+		}
+	}
+}
+
 func startNewGame() (*Game, error) {
 	// Try a few times to find an unused game Id, else give up.
 	// (I don't like forever loops... 100 attempts is plenty.)
@@ -93,41 +183,7 @@ func startNewGame() (*Game, error) {
 		}
 		ongoingGamesMut.Unlock()
 		if game != nil {
-			go func() {
-				eventListeners := make(map[string]chan ServerEvent)
-				// A background goroutine will send events to all listeners of the game.
-				for {
-					tick := time.After(1 * time.Second)
-					select {
-					case ce := <-game.ControlChan:
-						switch e := ce.(type) {
-						case ControlEventRegister:
-							if ch, ok := eventListeners[e.PlayerId]; ok {
-								e.ReplyChan <- ch
-							} else {
-								ch := make(chan ServerEvent)
-								eventListeners[e.PlayerId] = ch
-								e.ReplyChan <- ch
-							}
-						case ControlEventUnregister:
-							delete(eventListeners, e.PlayerId)
-							if len(eventListeners) == 0 {
-								// No more listeners left: end the game.
-								log.Printf("Game %s has no listeners left. Finishing.", game.Id)
-								return
-							}
-						}
-					case <-tick:
-						t := time.Now().Format(time.RFC3339)
-						for playerId, ch := range eventListeners {
-							ch <- ServerEvent{
-								Timestamp:    t,
-								DebugMessage: playerId,
-							}
-						}
-					}
-				}
-			}()
+			go gameMaster(game)
 			return game, nil
 		}
 	}
@@ -172,11 +228,8 @@ func gameHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 type MoveRequest struct {
-	Move int `json:"move"`
-}
-
-type MoveResponse struct {
-	Move int `json:"move"`
+	Row int `json:"row"`
+	Col int `json:"col"`
 }
 
 func moveHandler(w http.ResponseWriter, r *http.Request) {
@@ -184,23 +237,52 @@ func moveHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid method", http.StatusBadRequest)
 		return
 	}
+	cookie, err := r.Cookie("playerId")
+	if err != nil {
+		http.Error(w, "Missing playerId cookie", http.StatusBadRequest)
+		return
+	}
+	playerId := cookie.Value
 	dec := json.NewDecoder(r.Body)
 	var req MoveRequest
 	if err := dec.Decode(&req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 	}
-	log.Print("Received move request with value ", req.Move)
-	w.Header().Set("Content-Type", "application/json")
-
-	enc := json.NewEncoder(w)
-	if err := enc.Encode(MoveResponse{Move: req.Move}); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	gameId := gameIdFromPath(r.URL.Path)
+	game := lookupGame(gameId)
+	if game == nil {
+		http.Error(w, fmt.Sprintf("No game with ID %q", gameId), http.StatusNotFound)
+		return
 	}
+	log.Printf("Received move request from %s: (%d, %d)", playerId, req.Row, req.Col)
+	game.ControlChan <- ControlEventMove{PlayerId: playerId, Row: req.Row, Col: req.Col}
+}
+
+type Field struct {
+	Value int `json:"value"`
+	Owner int `json:"owner"` // Player number owning this field.
+}
+
+type Board struct {
+	Turn   int       `json:"turn"`
+	Fields [][]Field `json:"fields"`
 }
 
 type ServerEvent struct {
 	Timestamp    string `json:"timestamp"`
+	Board        *Board `json:"board"`
 	DebugMessage string `json:"debugMessage"`
+}
+
+func gameIdFromPath(path string) string {
+	// Look up game from URL path.
+	pathSegs := strings.Split(path, "/")
+	gameId := ""
+	l := len(pathSegs)
+	if l > 0 {
+		gameId = pathSegs[l-1]
+	}
+	return gameId
 }
 
 func sseHandler(w http.ResponseWriter, r *http.Request) {
@@ -213,13 +295,7 @@ func sseHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	playerId := cookie.Value
-	// Look up game from URL path.
-	pathSegs := strings.Split(r.URL.Path, "/")
-	gameId := ""
-	l := len(pathSegs)
-	if l > 0 {
-		gameId = pathSegs[l-1]
-	}
+	gameId := gameIdFromPath(r.URL.Path)
 	game := lookupGame(gameId)
 	if game == nil {
 		log.Printf("SSE request for invalid game %s", gameId)
@@ -260,7 +336,7 @@ func main() {
 	if _, err := readGameHtml(); err != nil {
 		log.Fatal("Cannot load game HTML: ", err)
 	}
-	http.HandleFunc("/hexz/move", moveHandler)
+	http.HandleFunc("/hexz/move/", moveHandler)
 	http.HandleFunc("/hexz/sse/", sseHandler)
 	http.HandleFunc("/hexz", startNewGameHandler)
 	http.HandleFunc("/hexz/", gameHandler)
