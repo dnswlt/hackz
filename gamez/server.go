@@ -16,9 +16,11 @@ import (
 )
 
 var (
-	gameHtmlFile  = flag.String("html", "index.html", "Path to game HTML file")
-	serverAddress = flag.String("address", "", "Address on which to listen")
-	serverPort    = flag.Int("port", 8084, "Port on which to listen")
+	gameHtmlFile       = flag.String("html", "index.html", "Path to game HTML file")
+	serverAddress      = flag.String("address", "", "Address on which to listen")
+	serverPort         = flag.Int("port", 8084, "Port on which to listen")
+	gameGcDelaySeconds = flag.Int("gcdelay", 5,
+		"Seconds to wait before deleting a disconnected player from a game")
 
 	ongoingGames    = make(map[string]*Game)
 	ongoingGamesMut sync.Mutex
@@ -149,6 +151,7 @@ func gameIdFromPath(path string) string {
 // Controller function for a running game. To be executed by a dedicated goroutine.
 func gameMaster(game *Game) {
 	const numPlayers = 2
+	gcTimeout := time.Duration(*gameGcDelaySeconds) * time.Second
 	board := NewBoard()
 	eventListeners := make(map[string]chan ServerEvent)
 	players := make(map[string]int) // playerId => player number (1, 2)
@@ -203,7 +206,7 @@ func gameMaster(game *Game) {
 				cancelChan := make(chan bool, 1)
 				playerGcCancel[e.PlayerId] = cancelChan
 				go func(playerId string) {
-					t := time.After(60 * time.Second)
+					t := time.After(gcTimeout)
 					select {
 					case <-t:
 						gcChan <- playerId
@@ -379,6 +382,7 @@ func gameHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func defaultHandler(w http.ResponseWriter, r *http.Request) {
+	// Ignore
 	log.Print("Ignoring request for path: ", r.URL.Path, r.URL.RawQuery)
 }
 

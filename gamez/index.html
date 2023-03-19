@@ -6,8 +6,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Gamez!</title>
     <style>
-        #canvas {
-            border: solid 1px;
+        html, body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
         }
     </style>
     <script type="text/javascript">
@@ -34,23 +36,6 @@
         };
 
         function handleServerEvent(serverEvent) {
-            /*
-                type Field struct {
-                    Value int `json:"value"`
-                    Owner int `json:"owner"` // Player number owning this field.
-                }
-
-                type Board struct {
-                    Turn   int       `json:"turn"`
-                    Fields [][]Field `json:"fields"`
-                }
-
-                type ServerEvent struct {
-                    Timestamp    string `json:"timestamp"`
-                    Board        *Board `json:"board"`
-                    DebugMessage string `json:"debugMessage"`
-                }
-            */
             if (serverEvent.board != null) {
                 // new board received.
                 gstate.board = serverEvent.board;
@@ -60,6 +45,10 @@
                 console.log(serverEvent.timestamp + ": " + serverEvent.debugMessage);
             }
         }
+
+        function navigateHome() {
+            window.location.replace("/hexz");
+        }
     </script>
 </head>
 
@@ -68,7 +57,7 @@
         <canvas id="canvas" width="560" height="550"></canvas>
     </div>
     <div id="controls">
-        <button id="reset">Reset</button>
+        <button id="home" onclick="navigateHome()">Home</button>
     </div>
 
     <script type="text/javascript">
@@ -88,6 +77,9 @@
         }
 
         function drawHexagons(ctx) {
+            if (!gstate.board) {
+                return;
+            }
             let a = hexagonSideLength;
             let b = Math.sqrt(3) * a;
             let nRows = gstate.board.fields.length;
@@ -120,7 +112,21 @@
             drawHexagons(ctx);
         }
 
+        function resizeCanvas() {
+            const canvas = document.getElementById("canvas");
+            const defaultWidth = 560;
+            const defaultHeight = 550;
+            canvas.width = document.body.clientWidth;
+            canvas.height = Math.ceil(canvas.width * (defaultHeight / defaultWidth));
+            pad = canvas.width < 500 ? 10 : 20;
+            hexagonSideLength = (canvas.width - 2 * pad) / (10 * Math.sqrt(3));
+            redraw();
+        }
+
         function initialize() {
+
+            window.addEventListener('resize', resizeCanvas);
+            resizeCanvas();
 
             canvas.addEventListener('click', function (event) {
                 const c = document.getElementById("canvas");
@@ -147,8 +153,6 @@
                 ctx.resetTransform();
             });
 
-            document.getElementById("reset").onclick = reset;
-
             const evtSource = new EventSource("/hexz/sse/" + gameId());
             evtSource.onmessage = (event) => {
                 const serverEvent = JSON.parse(event.data);
@@ -167,10 +171,8 @@
             redraw();
         }
 
-        const hexagonSideLength = 30;
-        const numFieldsHorizontally = 10;
-        const numFieldsVertically = 11;
-        const pad = 20;
+        var hexagonSideLength = 30;
+        var pad = 20;
 
         const styles = {
             colors: {
