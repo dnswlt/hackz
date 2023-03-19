@@ -57,29 +57,23 @@
                 gstate.board = serverEvent.board;
                 redraw();
                 updateTurnInfo();
+                updateScore();
             }
             if (serverEvent.debugMessage.length > 0) {
                 console.log(serverEvent.timestamp + ": " + serverEvent.debugMessage + " " + serverEvent.activeGames);
             }
             if (serverEvent.activeGames && serverEvent.activeGames.length > 0) {
-                let div = document.getElementById("activeGames");
-                let html = ["Other games: "];
-                let gId = gameId();
-                for (g of serverEvent.activeGames) {
-                    if (g != gId) {
-                        html.push(`<a href="/hexz/${g}">${g}</a>`);
-                    }
-                }
-                if (html.length > 1) {
-                    div.innerHTML = html.join(" ");
-                } else {
-                    div.innerHTML = "";
-                }
+                updateActiveGames(serverEvent.activeGames);
             }
         }
 
+        function updateScore() {
+            let div = document.getElementById("scoreInfo");
+            const s = gstate.board.score;
+            div.innerHTML = `${s[0]} &ndash; ${s[1]}`
+        }
+
         function updateTurnInfo() {
-            console.log("Updating board: ", gstate.role, gstate.board.turn);
             let div = document.getElementById("turnInfo");
             if (gstate.role > 0) {
                 // one of the players
@@ -88,6 +82,23 @@
                 // spectator
                 div.innerHTML = (gstate.board.turn == 1) ? "Blue's turn" : "Yellow's turn";
             }
+        }
+
+        function updateActiveGames(gameIds) {
+            let div = document.getElementById("activeGames");
+                let html = ["Other games: "];
+                let ownId = gameId();
+                for (gId of gameIds) {
+                    if (gId != ownId) {
+                        html.push(`<a href="/hexz/${gId}">${gId}</a>`);
+                    }
+                }
+                if (html.length > 1) {
+                    div.innerHTML = html.join(" ");
+                } else {
+                    // No other ongoing games.
+                    div.innerHTML = "";
+                }
         }
 
         function navigateHome() {
@@ -102,8 +113,9 @@
     </div>
     <div id="controls" class="menu">
         <button id="home" class="menuitem" onclick="navigateHome()">Home</button>
-        <div class="menuitem" id="activeGames"></div>
+        <div class="menuitem" id="scoreInfo"></div>
         <div class="menuitem" id="turnInfo"></div>
+        <div class="menuitem" id="activeGames"></div>
     </div>
 
     <script type="text/javascript">

@@ -55,6 +55,7 @@ type Field struct {
 type Board struct {
 	Turn   int       `json:"turn"`
 	Fields [][]Field `json:"fields"`
+	Score  []int     `json:"score"` // Always two elements
 }
 
 type ServerEvent struct {
@@ -139,6 +140,7 @@ func NewBoard() *Board {
 	return &Board{
 		Turn:   1, // Player 1 begins
 		Fields: fields,
+		Score:  []int{0, 0},
 	}
 }
 
@@ -151,6 +153,18 @@ func gameIdFromPath(path string) string {
 		gameId = pathSegs[l-1]
 	}
 	return gameId
+}
+
+func recomputeScore(b *Board) {
+	s := []int{0, 0}
+	for _, row := range b.Fields {
+		for _, fld := range row {
+			if fld.Owner > 0 {
+				s[fld.Owner-1] += fld.Value
+			}
+		}
+	}
+	b.Score = s
 }
 
 // Controller function for a running game. To be executed by a dedicated goroutine.
@@ -225,14 +239,18 @@ func gameMaster(game *Game) {
 					break
 				}
 				if e.Row < 0 || e.Row >= len(board.Fields) || e.Col < 0 || e.Col >= len(board.Fields[e.Row]) {
+					// Invalid field indices.
 					break
 				}
+				// Occupy field.
 				board.Fields[e.Row][e.Col].Value = 1
 				board.Fields[e.Row][e.Col].Owner = playerNum
+				// Update turn.
 				board.Turn++
 				if board.Turn > numPlayers {
 					board.Turn = 1
 				}
+				recomputeScore(board)
 				broadcast(ServerEvent{Board: board})
 			}
 		case <-tick:
