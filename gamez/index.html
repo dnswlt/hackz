@@ -11,6 +11,9 @@
             height: 100%;
             margin: 0;
         }
+        .menubar {
+            display: inline;
+        }
     </style>
     <script type="text/javascript">
         function gameId() {
@@ -42,7 +45,15 @@
                 redraw();
             }
             if (serverEvent.debugMessage.length > 0) {
-                console.log(serverEvent.timestamp + ": " + serverEvent.debugMessage);
+                console.log(serverEvent.timestamp + ": " + serverEvent.debugMessage + " " + serverEvent.activeGames);
+            }
+            if (serverEvent.activeGames && serverEvent.activeGames.length > 0) {
+                let div = document.getElementById("activeGames");
+                let html = [];
+                for (g of serverEvent.activeGames) {
+                    html.push(`<a href="/hexz/${g}">${g}</a>`);
+                }
+                div.innerHTML = html.join(" ");
             }
         }
 
@@ -57,7 +68,8 @@
         <canvas id="canvas" width="560" height="550"></canvas>
     </div>
     <div id="controls">
-        <button id="home" onclick="navigateHome()">Home</button>
+        <button id="home" class="menubar" onclick="navigateHome()">Home</button>
+        <div id="activeGames"></div>
     </div>
 
     <script type="text/javascript">

@@ -10,6 +10,7 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -41,6 +42,7 @@ func readGameHtml() (string, error) {
 
 type Game struct {
 	Id          string
+	Started     time.Time
 	ControlChan chan ControlEvent // The channel to communicate with the game coordinating goroutine.
 }
 
@@ -56,9 +58,10 @@ type Board struct {
 }
 
 type ServerEvent struct {
-	Timestamp    string `json:"timestamp"`
-	Board        *Board `json:"board"`
-	DebugMessage string `json:"debugMessage"`
+	Timestamp    string   `json:"timestamp"`
+	Board        *Board   `json:"board"`
+	DebugMessage string   `json:"debugMessage"`
+	ActiveGames  []string `json:"activeGames"`
 }
 
 // JSON for incoming requests from UI clients.
@@ -121,6 +124,7 @@ func generateGameId() string {
 func NewGame(id string) *Game {
 	return &Game{
 		Id:          id,
+		Started:     time.Now(),
 		ControlChan: make(chan ControlEvent),
 	}
 }
@@ -231,7 +235,7 @@ func gameMaster(game *Game) {
 				broadcast(ServerEvent{Board: board})
 			}
 		case <-tick:
-			broadcast(ServerEvent{DebugMessage: "ping"})
+			broadcast(ServerEvent{ActiveGames: listRecentGames(5), DebugMessage: "ping"})
 		case playerId := <-gcChan:
 			if _, ok := playerGcCancel[playerId]; !ok {
 				// Ignore zombie GC message. Player has already reconnected.
@@ -283,7 +287,28 @@ func lookupGame(id string) *Game {
 	return ongoingGames[id]
 }
 
-func startNewGameHandler(w http.ResponseWriter, r *http.Request) {
+func listRecentGames(limit int) []string {
+	ongoingGamesMut.Lock()
+	games := []*Game{}
+	for _, g := range ongoingGames {
+		games = append(games, g)
+	}
+	ongoingGamesMut.Unlock()
+	sort.Slice(games, func(i, j int) bool {
+		return games[i].Started.After(games[j].Started)
+	})
+	n := limit
+	if limit > len(games) {
+		n = len(games)
+	}
+	ids := make([]string, n)
+	for i, g := range games[:n] {
+		ids[i] = g.Id
+	}
+	return ids
+}
+
+func handleStartNewGame(w http.ResponseWriter, r *http.Request) {
 	game, err := startNewGame()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusPreconditionFailed)
@@ -291,7 +316,7 @@ func startNewGameHandler(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, fmt.Sprintf("%s/%s", r.URL.Path, game.Id), http.StatusSeeOther)
 }
 
-func moveHandler(w http.ResponseWriter, r *http.Request) {
+func handleMove(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Invalid method", http.StatusBadRequest)
 		return
@@ -317,7 +342,7 @@ func moveHandler(w http.ResponseWriter, r *http.Request) {
 	game.ControlChan <- ControlEventMove{PlayerId: playerId, Row: req.Row, Col: req.Col}
 }
 
-func sseHandler(w http.ResponseWriter, r *http.Request) {
+func handleSse(w http.ResponseWriter, r *http.Request) {
 	log.Print("Incoming SSE request: ", r.URL.Path)
 	// We expect a cookie to identify the player.
 	cookie, err := r.Cookie("playerId")
@@ -358,7 +383,7 @@ func sseHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func gameHandler(w http.ResponseWriter, r *http.Request) {
+func handleGame(w http.ResponseWriter, r *http.Request) {
 	_, err := r.Cookie("playerId")
 	if err != nil {
 		playerId := generatePlayerId()
@@ -392,10 +417,10 @@ func main() {
 	if _, err := readGameHtml(); err != nil {
 		log.Fatal("Cannot load game HTML: ", err)
 	}
-	http.HandleFunc("/hexz/move/", moveHandler)
-	http.HandleFunc("/hexz/sse/", sseHandler)
-	http.HandleFunc("/hexz", startNewGameHandler)
-	http.HandleFunc("/hexz/", gameHandler)
+	http.HandleFunc("/hexz/move/", handleMove)
+	http.HandleFunc("/hexz/sse/", handleSse)
+	http.HandleFunc("/hexz", handleStartNewGame)
+	http.HandleFunc("/hexz/", handleGame)
 	http.HandleFunc("/", defaultHandler)
 
 	addr := fmt.Sprintf("%s:%d", *serverAddress, *serverPort)
