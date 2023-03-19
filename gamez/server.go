@@ -17,7 +17,7 @@ import (
 )
 
 var (
-	gameHtmlFile       = flag.String("html", "index.html", "Path to game HTML file")
+	gameHtmlFile       = flag.String("html", "game.html", "Path to game HTML file")
 	serverAddress      = flag.String("address", "", "Address on which to listen")
 	serverPort         = flag.Int("port", 8084, "Port on which to listen")
 	gameGcDelaySeconds = flag.Int("gcdelay", 5,
@@ -60,6 +60,7 @@ type Board struct {
 type ServerEvent struct {
 	Timestamp    string   `json:"timestamp"`
 	Board        *Board   `json:"board"`
+	Role         int      `json:"role"` // 0: spectator, 1, 2: players
 	DebugMessage string   `json:"debugMessage"`
 	ActiveGames  []string `json:"activeGames"`
 }
@@ -180,7 +181,7 @@ func gameMaster(game *Game) {
 			switch e := ce.(type) {
 			case ControlEventRegister:
 				if _, ok := players[e.PlayerId]; ok {
-					// Player reconnected. Cancel it's GC.
+					// Player reconnected. Cancel its GC.
 					if cancel, ok := playerGcCancel[e.PlayerId]; ok {
 						log.Printf("Player %s reconnected. Cancelling GC.", e.PlayerId)
 						cancel <- true
@@ -196,8 +197,8 @@ func gameMaster(game *Game) {
 				ch := make(chan ServerEvent)
 				eventListeners[e.PlayerId] = ch
 				e.ReplyChan <- ch
-				// Send board initially so client can display the UI.
-				singlecast(e.PlayerId, ServerEvent{Board: board})
+				// Send board and player role initially so client can display the UI.
+				singlecast(e.PlayerId, ServerEvent{Board: board, ActiveGames: listRecentGames(5), Role: players[e.PlayerId]})
 			case ControlEventUnregister:
 				delete(eventListeners, e.PlayerId)
 				if _, ok := playerGcCancel[e.PlayerId]; ok {
@@ -308,7 +309,8 @@ func listRecentGames(limit int) []string {
 	return ids
 }
 
-func handleStartNewGame(w http.ResponseWriter, r *http.Request) {
+func handleHexz(w http.ResponseWriter, r *http.Request) {
+	// For now, immediately redirect to a new game.
 	game, err := startNewGame()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusPreconditionFailed)
@@ -355,16 +357,17 @@ func handleSse(w http.ResponseWriter, r *http.Request) {
 	gameId := gameIdFromPath(r.URL.Path)
 	game := lookupGame(gameId)
 	if game == nil {
-		log.Printf("SSE request for invalid game %s", gameId)
-		http.Error(w, fmt.Sprintf("Game %s not found", gameId), http.StatusNotFound)
+		http.Error(w, fmt.Sprintf("Game %s does not exist", gameId), http.StatusNotFound)
 		return
 	}
 	serverEventChan := game.addEventListener(playerId)
+	// Headers to establish server-sent events (SSE) communication.
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-store")
 	for {
 		select {
 		case ev := <-serverEventChan:
+			// Send ServerEvent JSON on SSE connection.
 			var buf strings.Builder
 			enc := json.NewEncoder(&buf)
 			if err := enc.Encode(ev); err != nil {
@@ -419,7 +422,7 @@ func main() {
 	}
 	http.HandleFunc("/hexz/move/", handleMove)
 	http.HandleFunc("/hexz/sse/", handleSse)
-	http.HandleFunc("/hexz", handleStartNewGame)
+	http.HandleFunc("/hexz", handleHexz)
 	http.HandleFunc("/hexz/", handleGame)
 	http.HandleFunc("/", defaultHandler)
 
