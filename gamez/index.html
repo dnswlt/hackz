@@ -5,40 +5,74 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Gamez!</title>
+    <style>
+        #canvas {
+            border: solid 1px;
+        }
+    </style>
     <script type="text/javascript">
         function gameId() {
             let pathSegs = window.location.pathname.split("/");
             return pathSegs[pathSegs.length - 1];
         }
 
-        async function postSomething() {
-            console.log("postSomething");
+        async function sendMove(row, col) {
             return fetch("/hexz/move/" + gameId(), {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
-                    row: 1,
-                    col: 1
+                    row: row,
+                    col: col,
                 }),
             })
-            // let resp = await response.json();
-            // console.log(resp);
+        }
+
+        const gstate = {
+            board: null,
+        };
+
+        function handleServerEvent(serverEvent) {
+            /*
+                type Field struct {
+                    Value int `json:"value"`
+                    Owner int `json:"owner"` // Player number owning this field.
+                }
+
+                type Board struct {
+                    Turn   int       `json:"turn"`
+                    Fields [][]Field `json:"fields"`
+                }
+
+                type ServerEvent struct {
+                    Timestamp    string `json:"timestamp"`
+                    Board        *Board `json:"board"`
+                    DebugMessage string `json:"debugMessage"`
+                }
+            */
+            if (serverEvent.board != null) {
+                // new board received.
+                gstate.board = serverEvent.board;
+                redraw();
+            }
+            if (serverEvent.debugMessage.length > 0) {
+                console.log(serverEvent.timestamp + ": " + serverEvent.debugMessage);
+            }
         }
     </script>
 </head>
 
 <body>
     <div>
-        <canvas id="canvas" width="700" height="600"></canvas>
+        <canvas id="canvas" width="560" height="550"></canvas>
     </div>
     <div id="controls">
         <button id="reset">Reset</button>
-        <button id="postSth" onclick="postSomething()">Post Sth</button>
     </div>
 
     <script type="text/javascript">
+        // Returns a Path2D representing a 0-centered hexagon with side length a.
         function hexagon(a) {
             let p = new Path2D();
             let b2 = Math.sqrt(3) * a / 2;
@@ -50,113 +84,87 @@
             p.lineTo(0, -a);
             p.lineTo(b2, -a2);
             p.lineTo(b2, a2);
-            return {
-                path: p,
-                sideLength: a,
-                value: 0,
-                x: 0,
-                y: 0,
-            };
-        }
-
-        function drawBbox(ctx) {
-            let b = Math.sqrt(3) * hexagonSideLength;
-            let width = numFieldsHorizontally * b + 2 * pad;
-            let a2 = 2 * Math.floor((numFieldsVertically + 1) / 2);
-            let a = Math.floor(numFieldsVertically / 2);
-            let height = (a + a2) * hexagonSideLength + 2 * pad;
-            ctx.rect(0, 0, width, height);
-            ctx.strokeStyle = "#000000";
-            ctx.stroke();
+            return p;
         }
 
         function drawHexagons(ctx) {
-            for (const fld of gstate.fields) {
-                ctx.translate(fld.x, fld.y);
-                if (fld.value != 0) {
-                    let p = fld.value > 0 ? 0 : 1;
-                    ctx.fillStyle = styles.colors.players[p];
-                    ctx.fill(fld.path);
+            let a = hexagonSideLength;
+            let b = Math.sqrt(3) * a;
+            let nRows = gstate.board.fields.length;
+            let hex = hexagon(a);
+            for (let i = 0; i < nRows; i++) {
+                for (let j = 0; j < gstate.board.fields[i].length; j++) {
+                    let xOff = (i % 2 == 0) ? 0 : b / 2;
+                    let x = xOff + j * b + b / 2;
+                    let y = i * a * 3 / 2 + a;
+                    let fld = gstate.board.fields[i][j];
+                    ctx.translate(x, y);
+                    if (fld.value != 0) {
+                        ctx.fillStyle = styles.colors.players[fld.owner - 1];
+                        ctx.fill(hex);
+                    }
+                    ctx.strokeStyle = styles.colors.grid;
+                    ctx.stroke(hex);
+                    // Undo transform.
+                    ctx.translate(-x, -y);
                 }
-                ctx.strokeStyle = styles.colors.grid;
-                ctx.stroke(fld.path);
-                // Undo transform.
-                ctx.translate(-fld.x, -fld.y);
             }
         }
 
-        function redraw(ctx) {
+        function redraw() {
+            const c = document.getElementById("canvas");
+            const ctx = canvas.getContext("2d");
             ctx.resetTransform();
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            drawBbox(ctx);
             ctx.translate(pad, pad);
             drawHexagons(ctx);
         }
 
         function initialize() {
-            const c = document.getElementById("canvas");
-            const ctx = canvas.getContext("2d");
-            let a = hexagonSideLength;
-            let b = Math.sqrt(3) * a;
-            let nRows = numFieldsVertically;
-            for (let i = 0; i < nRows; i++) {
-                let nCols = (i % 2 == 0) ? numFieldsHorizontally : numFieldsHorizontally - 1;
-                for (let j = 0; j < nCols; j++) {
-                    let xOff = (i % 2 == 0) ? 0 : b / 2;
-                    let hex = hexagon(a);
-                    hex.x = xOff + j * b + b / 2;
-                    hex.y = i * a * 3 / 2 + a;
-                    gstate.fields.push(hex);
-                }
-            }
-            redraw(ctx);
 
             canvas.addEventListener('click', function (event) {
+                const c = document.getElementById("canvas");
+                const ctx = canvas.getContext("2d");
                 ctx.resetTransform();
                 ctx.translate(pad, pad);
-                let found = false;
-                for (const fld of gstate.fields) {
-                    ctx.translate(fld.x, fld.y);
-                    if (ctx.isPointInPath(fld.path, event.offsetX, event.offsetY)) {
-                        clickedOnField(fld);
-                        ctx.translate(-fld.x, -fld.y);
-                        break;
+                let a = hexagonSideLength;
+                let b = Math.sqrt(3) * a;
+                let nRows = gstate.board.fields.length;
+                let hex = hexagon(a);
+                for (let i = 0; i < nRows; i++) {
+                    for (let j = 0; j < gstate.board.fields[i].length; j++) {
+                        let xOff = (i % 2 == 0) ? 0 : b / 2;
+                        let x = xOff + j * b + b / 2;
+                        let y = i * a * 3 / 2 + a;
+                        ctx.translate(x, y);
+                        if (ctx.isPointInPath(hex, event.offsetX, event.offsetY)) {
+                            clickedOnField(i, j);
+                            break;
+                        }
+                        ctx.translate(-x, -y);
                     }
-                    ctx.translate(-fld.x, -fld.y);
                 }
-                redraw(ctx);
+                ctx.resetTransform();
             });
+
             document.getElementById("reset").onclick = reset;
 
-            let pathSegs = window.location.pathname.split("/");
-            let gameId = pathSegs[pathSegs.length - 1];
-            const evtSource = new EventSource("/hexz/sse/" + gameId);
+            const evtSource = new EventSource("/hexz/sse/" + gameId());
             evtSource.onmessage = (event) => {
-                const msg = JSON.parse(event.data);
-                console.log("Server-sent event: ", msg);
+                const serverEvent = JSON.parse(event.data);
+                handleServerEvent(serverEvent);
             }
             evtSource.onerror = (err) => {
-                console.error("EventSource failed:", err);
+                // Do nothing for now, the Browser will try to reconnect.
             }
         }
 
-        function clickedOnField(fld) {
-            if (fld.value != 0) {
-                return;
-            }
-            fld.value = gstate.turn;
-            gstate.turn = -gstate.turn;
+        function clickedOnField(row, col) {
+            sendMove(row, col);
         }
 
         function reset() {
-            const c = document.getElementById("canvas");
-            const ctx = canvas.getContext("2d");
-            for (let fld of gstate.fields) {
-                fld.value = 0;
-            }
-            gstate.turn = 1;
-            gstate.moves = [];
-            redraw(ctx);
+            redraw();
         }
 
         const hexagonSideLength = 30;
@@ -169,12 +177,6 @@
                 grid: '#000000',
                 players: ['#255ab4', '#f8d748'],
             },
-        };
-
-        var gstate = {
-            fields: [],
-            moves: [],
-            turn: 1,
         };
 
         initialize();

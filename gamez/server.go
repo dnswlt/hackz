@@ -42,6 +42,30 @@ type Game struct {
 	ControlChan chan ControlEvent // The channel to communicate with the game coordinating goroutine.
 }
 
+// JSON for server responses.
+type Field struct {
+	Value int `json:"value"`
+	Owner int `json:"owner"` // Player number owning this field.
+}
+
+type Board struct {
+	Turn   int       `json:"turn"`
+	Fields [][]Field `json:"fields"`
+}
+
+type ServerEvent struct {
+	Timestamp    string `json:"timestamp"`
+	Board        *Board `json:"board"`
+	DebugMessage string `json:"debugMessage"`
+}
+
+// JSON for incoming requests from UI clients.
+type MoveRequest struct {
+	Row int `json:"row"`
+	Col int `json:"col"`
+}
+
+// Control events are sent to the game master goroutine.
 type ControlEvent interface {
 	controlEventImpl() // Interface marker function
 }
@@ -75,12 +99,14 @@ func (g *Game) removeEventListener(playerId string) {
 	g.ControlChan <- ControlEventUnregister{PlayerId: playerId}
 }
 
+// Generates a random 128-bit hex string representing a player ID.
 func generatePlayerId() string {
 	p := make([]byte, 16)
 	crand.Read(p)
 	return hex.EncodeToString(p)
 }
 
+// Generates a 6-letter game ID.
 func generateGameId() string {
 	var alphabet = []rune("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
 	var b strings.Builder
@@ -109,15 +135,34 @@ func NewBoard() *Board {
 	}
 }
 
+// Looks up the game ID from the URL path.
+func gameIdFromPath(path string) string {
+	pathSegs := strings.Split(path, "/")
+	gameId := ""
+	l := len(pathSegs)
+	if l > 0 {
+		gameId = pathSegs[l-1]
+	}
+	return gameId
+}
+
 // Controller function for a running game. To be executed by a dedicated goroutine.
 func gameMaster(game *Game) {
 	const numPlayers = 2
-	eventListeners := make(map[string]chan ServerEvent)
 	board := NewBoard()
-	players := make(map[string]int)
+	eventListeners := make(map[string]chan ServerEvent)
+	players := make(map[string]int) // playerId => player number (1, 2)
+	playerGcCancel := make(map[string]chan bool)
+	gcChan := make(chan string)
 	broadcast := func(e ServerEvent) {
 		e.Timestamp = time.Now().Format(time.RFC3339)
 		for _, ch := range eventListeners {
+			ch <- e
+		}
+	}
+	singlecast := func(playerId string, e ServerEvent) {
+		if ch, ok := eventListeners[playerId]; ok {
+			e.Timestamp = time.Now().Format(time.RFC3339)
 			ch <- e
 		}
 	}
@@ -127,26 +172,44 @@ func gameMaster(game *Game) {
 		case ce := <-game.ControlChan:
 			switch e := ce.(type) {
 			case ControlEventRegister:
-				if ch, ok := eventListeners[e.PlayerId]; ok {
-					e.ReplyChan <- ch
+				if _, ok := players[e.PlayerId]; ok {
+					// Player reconnected. Cancel it's GC.
+					if cancel, ok := playerGcCancel[e.PlayerId]; ok {
+						log.Printf("Player %s reconnected. Cancelling GC.", e.PlayerId)
+						cancel <- true
+						delete(playerGcCancel, e.PlayerId)
+					}
 				} else {
 					// The first two participants in the game are players.
 					// Anyone arriving later will be a spectator.
 					if len(players) < numPlayers {
 						players[e.PlayerId] = len(players) + 1
 					}
-					ch := make(chan ServerEvent)
-					eventListeners[e.PlayerId] = ch
-					e.ReplyChan <- ch
 				}
+				ch := make(chan ServerEvent)
+				eventListeners[e.PlayerId] = ch
+				e.ReplyChan <- ch
+				// Send board initially so client can display the UI.
+				singlecast(e.PlayerId, ServerEvent{Board: board})
 			case ControlEventUnregister:
 				delete(eventListeners, e.PlayerId)
-				delete(players, e.PlayerId)
-				if len(eventListeners) == 0 {
-					// No more listeners left: end the game.
-					log.Printf("Game %s has no listeners left. Finishing.", game.Id)
-					return
+				if _, ok := playerGcCancel[e.PlayerId]; ok {
+					// A repeated unregister should not happen. If it does, we ignore
+					// it and just wait for the existing GC "callback" to happen.
+					break
 				}
+				// Remove player after timeout. Don't remove them immediately as they might
+				// just be reloading their page and rejoin soon.
+				cancelChan := make(chan bool, 1)
+				playerGcCancel[e.PlayerId] = cancelChan
+				go func(playerId string) {
+					t := time.After(60 * time.Second)
+					select {
+					case <-t:
+						gcChan <- playerId
+					case <-cancelChan:
+					}
+				}(e.PlayerId)
 			case ControlEventMove:
 				playerNum, ok := players[e.PlayerId]
 				if !ok || board.Turn != playerNum {
@@ -166,6 +229,21 @@ func gameMaster(game *Game) {
 			}
 		case <-tick:
 			broadcast(ServerEvent{DebugMessage: "ping"})
+		case playerId := <-gcChan:
+			if _, ok := playerGcCancel[playerId]; !ok {
+				// Ignore zombie GC message. Player has already reconnected.
+				log.Printf("Ignoring GC message for player %s in game %s", playerId, game.Id)
+			}
+			log.Printf("Player %s has left game %s", playerId, game.Id)
+			delete(eventListeners, playerId)
+			delete(players, playerId)
+			delete(playerGcCancel, playerId)
+			if len(players) == 0 {
+				// No more players left: end the game.
+				log.Printf("Game %s has no players left. Finishing.", game.Id)
+				deleteGame(game.Id)
+				return
+			}
 		}
 	}
 }
@@ -190,12 +268,10 @@ func startNewGame() (*Game, error) {
 	return nil, fmt.Errorf("Cannot start a new game")
 }
 
-func startNewGameHandler(w http.ResponseWriter, r *http.Request) {
-	game, err := startNewGame()
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusPreconditionFailed)
-	}
-	http.Redirect(w, r, fmt.Sprintf("%s/%s", r.URL.Path, game.Id), http.StatusSeeOther)
+func deleteGame(id string) {
+	ongoingGamesMut.Lock()
+	defer ongoingGamesMut.Unlock()
+	delete(ongoingGames, id)
 }
 
 func lookupGame(id string) *Game {
@@ -204,32 +280,12 @@ func lookupGame(id string) *Game {
 	return ongoingGames[id]
 }
 
-func gameHandler(w http.ResponseWriter, r *http.Request) {
-	_, err := r.Cookie("playerId")
+func startNewGameHandler(w http.ResponseWriter, r *http.Request) {
+	game, err := startNewGame()
 	if err != nil {
-		playerId := generatePlayerId()
-		cookie := &http.Cookie{
-			Name:     "playerId",
-			Value:    playerId,
-			Path:     "/hexz",
-			MaxAge:   24 * 60 * 60,
-			HttpOnly: true,
-			Secure:   false, // also allow plain http
-			SameSite: http.SameSiteLaxMode,
-		}
-		http.SetCookie(w, cookie)
+		http.Error(w, err.Error(), http.StatusPreconditionFailed)
 	}
-	gameHtml, err := readGameHtml()
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
-	w.Header().Set("Content-Type", "text/html")
-	fmt.Fprint(w, gameHtml)
-}
-
-type MoveRequest struct {
-	Row int `json:"row"`
-	Col int `json:"col"`
+	http.Redirect(w, r, fmt.Sprintf("%s/%s", r.URL.Path, game.Id), http.StatusSeeOther)
 }
 
 func moveHandler(w http.ResponseWriter, r *http.Request) {
@@ -256,33 +312,6 @@ func moveHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Printf("Received move request from %s: (%d, %d)", playerId, req.Row, req.Col)
 	game.ControlChan <- ControlEventMove{PlayerId: playerId, Row: req.Row, Col: req.Col}
-}
-
-type Field struct {
-	Value int `json:"value"`
-	Owner int `json:"owner"` // Player number owning this field.
-}
-
-type Board struct {
-	Turn   int       `json:"turn"`
-	Fields [][]Field `json:"fields"`
-}
-
-type ServerEvent struct {
-	Timestamp    string `json:"timestamp"`
-	Board        *Board `json:"board"`
-	DebugMessage string `json:"debugMessage"`
-}
-
-func gameIdFromPath(path string) string {
-	// Look up game from URL path.
-	pathSegs := strings.Split(path, "/")
-	gameId := ""
-	l := len(pathSegs)
-	if l > 0 {
-		gameId = pathSegs[l-1]
-	}
-	return gameId
 }
 
 func sseHandler(w http.ResponseWriter, r *http.Request) {
@@ -324,6 +353,29 @@ func sseHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+}
+
+func gameHandler(w http.ResponseWriter, r *http.Request) {
+	_, err := r.Cookie("playerId")
+	if err != nil {
+		playerId := generatePlayerId()
+		cookie := &http.Cookie{
+			Name:     "playerId",
+			Value:    playerId,
+			Path:     "/hexz",
+			MaxAge:   24 * 60 * 60,
+			HttpOnly: true,
+			Secure:   false, // also allow plain http
+			SameSite: http.SameSiteLaxMode,
+		}
+		http.SetCookie(w, cookie)
+	}
+	gameHtml, err := readGameHtml()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+	w.Header().Set("Content-Type", "text/html")
+	fmt.Fprint(w, gameHtml)
 }
 
 func defaultHandler(w http.ResponseWriter, r *http.Request) {
