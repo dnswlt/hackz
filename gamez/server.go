@@ -167,6 +167,94 @@ func recomputeScore(b *Board) {
 	b.Score = s
 }
 
+type Idx struct {
+	i, j int
+}
+
+func nthNeighbor(idx Idx, n int) Idx {
+	shift := idx.i % 2
+	switch n {
+	case 0:
+		return Idx{idx.i, idx.j + 1}
+	case 1:
+		return Idx{idx.i - 1, idx.j + shift}
+	case 2:
+		return Idx{idx.i - 1, idx.j - 1 + shift}
+	case 3:
+		return Idx{idx.i, idx.j - 1}
+	case 4:
+		return Idx{idx.i + 1, idx.j - 1 + shift}
+	case 5:
+		return Idx{idx.i + 1, idx.j + shift}
+	default:
+		panic("nthNeighbor: invalid index")
+	}
+}
+
+func floodFill(b *Board, idx Idx, cb func(Idx) bool) {
+	i, j := idx.i, idx.j
+	if i < 0 || i >= len(b.Fields) || j < 0 || j >= len(b.Fields[i]) {
+		return
+	}
+	if !cb(idx) {
+		return
+	}
+	for n := 0; n < 6; n++ {
+		floodFill(b, nthNeighbor(idx, n), cb)
+	}
+}
+
+func occupyFields(board *Board, playerNum, i, j int) {
+	// Create a copy of the board that indicates which neighboring cell of (i, j)
+	// it shares the free or opponent's area with.
+	// Then find the smallest of these areas and occupy every free cell in it.
+	ms := make([][]int, len(board.Fields))
+	for k := 0; k < len(ms); k++ {
+		ms[k] = make([]int, len(board.Fields[k]))
+	}
+	board.Fields[i][j].Value = 1
+	board.Fields[i][j].Owner = playerNum
+	emptyCounts := make(map[int]int)
+	for n := 0; n < 6; n++ {
+		floodFill(board, nthNeighbor(Idx{i, j}, n), func(idx Idx) bool {
+			if ms[idx.i][idx.j] > 0 {
+				// Already seen.
+				return false
+			}
+			if board.Fields[idx.i][idx.j].Owner == playerNum {
+				// Own fields act as boundaries.
+				return false
+			}
+			ms[idx.i][idx.j] = n + 1
+			if board.Fields[idx.i][idx.j].Value == 0 {
+				emptyCounts[n+1]++
+			}
+			return true
+		})
+	}
+	// If there is more than one area, we know we introduced a split, since the areas
+	// would have been connected previously by free cell (i, j)!
+	if len(emptyCounts) > 1 {
+		minN := 0
+		for n, cnt := range emptyCounts {
+			if cnt > 0 && (minN == 0 || emptyCounts[minN] > cnt) {
+				minN = n
+			}
+		}
+		if emptyCounts[minN] == 0 {
+			return
+		}
+		for r := 0; r < len(board.Fields); r++ {
+			for c := 0; c < len(board.Fields[r]); c++ {
+				if ms[r][c] == minN && board.Fields[r][c].Value == 0 {
+					board.Fields[r][c].Value = 1
+					board.Fields[r][c].Owner = playerNum
+				}
+			}
+		}
+	}
+}
+
 // Controller function for a running game. To be executed by a dedicated goroutine.
 func gameMaster(game *Game) {
 	const numPlayers = 2
@@ -242,9 +330,8 @@ func gameMaster(game *Game) {
 					// Invalid field indices.
 					break
 				}
-				// Occupy field.
-				board.Fields[e.Row][e.Col].Value = 1
-				board.Fields[e.Row][e.Col].Owner = playerNum
+				// Occupy fields.
+				occupyFields(board, playerNum, e.Row, e.Col)
 				// Update turn.
 				board.Turn++
 				if board.Turn > numPlayers {
