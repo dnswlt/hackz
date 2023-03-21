@@ -30,6 +30,8 @@ var (
 const (
 	numFieldsFirstRow = 10
 	numBoardRows      = 11
+
+	playerIdCookieName = "playerId"
 )
 
 func readGameHtml() (string, error) {
@@ -71,6 +73,9 @@ type MoveRequest struct {
 	Row int `json:"row"`
 	Col int `json:"col"`
 }
+type ResetRequest struct {
+	Message string `json:"message"`
+}
 
 // Control events are sent to the game master goroutine.
 type ControlEvent interface {
@@ -92,17 +97,23 @@ type ControlEventMove struct {
 	Col      int
 }
 
+type ControlEventReset struct {
+	playerId string
+	message  string
+}
+
 func (e ControlEventRegister) controlEventImpl()   {}
 func (e ControlEventUnregister) controlEventImpl() {}
 func (e ControlEventMove) controlEventImpl()       {}
+func (e ControlEventReset) controlEventImpl()      {}
 
-func (g *Game) addEventListener(playerId string) chan ServerEvent {
+func (g *Game) registerPlayer(playerId string) chan ServerEvent {
 	ch := make(chan chan ServerEvent)
 	g.ControlChan <- ControlEventRegister{PlayerId: playerId, ReplyChan: ch}
 	return <-ch
 }
 
-func (g *Game) removeEventListener(playerId string) {
+func (g *Game) unregisterPlayer(playerId string) {
 	g.ControlChan <- ControlEventUnregister{PlayerId: playerId}
 }
 
@@ -167,88 +178,99 @@ func recomputeScore(b *Board) {
 	b.Score = s
 }
 
-type Idx struct {
-	i, j int
+type idx struct {
+	r, c int
 }
 
-func nthNeighbor(idx Idx, n int) Idx {
-	shift := idx.i % 2
-	switch n {
-	case 0:
-		return Idx{idx.i, idx.j + 1}
-	case 1:
-		return Idx{idx.i - 1, idx.j + shift}
-	case 2:
-		return Idx{idx.i - 1, idx.j - 1 + shift}
-	case 3:
-		return Idx{idx.i, idx.j - 1}
-	case 4:
-		return Idx{idx.i + 1, idx.j - 1 + shift}
-	case 5:
-		return Idx{idx.i + 1, idx.j + shift}
-	default:
-		panic("nthNeighbor: invalid index")
+func (b *Board) valid(x idx) bool {
+	return x.r >= 0 && x.r < len(b.Fields) && x.c >= 0 && x.c < len(b.Fields[x.r])
+}
+
+func (b *Board) neighbors(x idx, ns []idx) int {
+	shift := x.r & 1
+	k := 0
+	ns[k] = idx{x.r, x.c + 1}
+	if b.valid(ns[k]) {
+		k++
 	}
+	ns[k] = idx{x.r - 1, x.c + shift}
+	if b.valid(ns[k]) {
+		k++
+	}
+	ns[k] = idx{x.r - 1, x.c - 1 + shift}
+	if b.valid(ns[k]) {
+		k++
+	}
+	ns[k] = idx{x.r, x.c - 1}
+	if b.valid(ns[k]) {
+		k++
+	}
+	ns[k] = idx{x.r + 1, x.c - 1 + shift}
+	if b.valid(ns[k]) {
+		k++
+	}
+	ns[k] = idx{x.r + 1, x.c + shift}
+	if b.valid(ns[k]) {
+		k++
+	}
+	return k
 }
 
-func floodFill(b *Board, idx Idx, cb func(Idx) bool) {
-	i, j := idx.i, idx.j
-	if i < 0 || i >= len(b.Fields) || j < 0 || j >= len(b.Fields[i]) {
+func floodFill(b *Board, x idx, cb func(idx) bool) {
+	var ns [6]idx
+	if !cb(x) {
 		return
 	}
-	if !cb(idx) {
-		return
-	}
-	for n := 0; n < 6; n++ {
-		floodFill(b, nthNeighbor(idx, n), cb)
+	n := b.neighbors(x, ns[:])
+	for i := 0; i < n; i++ {
+		floodFill(b, ns[i], cb)
 	}
 }
 
-func occupyFields(board *Board, playerNum, i, j int) {
+func occupyFields(b *Board, playerNum, i, j int) {
 	// Create a copy of the board that indicates which neighboring cell of (i, j)
 	// it shares the free or opponent's area with.
 	// Then find the smallest of these areas and occupy every free cell in it.
-	ms := make([][]int, len(board.Fields))
+	ms := make([][]int8, len(b.Fields))
 	for k := 0; k < len(ms); k++ {
-		ms[k] = make([]int, len(board.Fields[k]))
+		ms[k] = make([]int8, len(b.Fields[k]))
 	}
-	board.Fields[i][j].Value = 1
-	board.Fields[i][j].Owner = playerNum
-	emptyCounts := make(map[int]int)
-	for n := 0; n < 6; n++ {
-		floodFill(board, nthNeighbor(Idx{i, j}, n), func(idx Idx) bool {
-			if ms[idx.i][idx.j] > 0 {
+	b.Fields[i][j].Value = 1
+	b.Fields[i][j].Owner = playerNum
+	areaSizes := make(map[int8]int)
+	var ns [6]idx
+	n := b.neighbors(idx{i, j}, ns[:])
+	for k := 0; k < n; k++ {
+		k1 := int8(k + 1)
+		floodFill(b, ns[k], func(x idx) bool {
+			if ms[x.r][x.c] > 0 {
 				// Already seen.
 				return false
 			}
-			if board.Fields[idx.i][idx.j].Owner == playerNum {
-				// Own fields act as boundaries.
+			if b.Fields[x.r][x.c].Value > 0 {
+				// Occupied fields act as boundaries.
 				return false
 			}
-			ms[idx.i][idx.j] = n + 1
-			if board.Fields[idx.i][idx.j].Value == 0 {
-				emptyCounts[n+1]++
-			}
+			// Mark field as visited in k-th loop iteration.
+			ms[x.r][x.c] = k1
+			areaSizes[k1]++
 			return true
 		})
 	}
 	// If there is more than one area, we know we introduced a split, since the areas
-	// would have been connected previously by free cell (i, j)!
-	if len(emptyCounts) > 1 {
-		minN := 0
-		for n, cnt := range emptyCounts {
-			if cnt > 0 && (minN == 0 || emptyCounts[minN] > cnt) {
+	// would have been connected by the previously free cell (i, j).
+	if len(areaSizes) > 1 {
+		minN := int8(0)
+		for n, cnt := range areaSizes {
+			if minN == 0 || areaSizes[minN] > cnt {
 				minN = n
 			}
 		}
-		if emptyCounts[minN] == 0 {
-			return
-		}
-		for r := 0; r < len(board.Fields); r++ {
-			for c := 0; c < len(board.Fields[r]); c++ {
-				if ms[r][c] == minN && board.Fields[r][c].Value == 0 {
-					board.Fields[r][c].Value = 1
-					board.Fields[r][c].Owner = playerNum
+		for r := 0; r < len(b.Fields); r++ {
+			for c := 0; c < len(b.Fields[r]); c++ {
+				if ms[r][c] == minN {
+					b.Fields[r][c].Value = 1
+					b.Fields[r][c].Owner = playerNum
 				}
 			}
 		}
@@ -326,9 +348,12 @@ func gameMaster(game *Game) {
 					// Only allow moves by players whose turn it is.
 					break
 				}
-				if e.Row < 0 || e.Row >= len(board.Fields) || e.Col < 0 || e.Col >= len(board.Fields[e.Row]) {
+				if !board.valid(idx{e.Row, e.Col}) {
 					// Invalid field indices.
 					break
+				}
+				if board.Fields[e.Row][e.Col].Value > 0 {
+					// Cannot make move on already occupied field.
 				}
 				// Occupy fields.
 				occupyFields(board, playerNum, e.Row, e.Col)
@@ -338,6 +363,13 @@ func gameMaster(game *Game) {
 					board.Turn = 1
 				}
 				recomputeScore(board)
+				broadcast(ServerEvent{Board: board})
+			case ControlEventReset:
+				if _, ok := players[e.playerId]; !ok {
+					// Only players can reset a game (spectators cannot).
+					break
+				}
+				board = NewBoard()
 				broadcast(ServerEvent{Board: board})
 			}
 		case <-tick:
@@ -423,17 +455,22 @@ func handleHexz(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, fmt.Sprintf("%s/%s", r.URL.Path, game.Id), http.StatusSeeOther)
 }
 
-func handleMove(w http.ResponseWriter, r *http.Request) {
+func validatePostRequest(r *http.Request) (string, error) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "Invalid method", http.StatusBadRequest)
-		return
+		return "", fmt.Errorf("invalid method")
 	}
-	cookie, err := r.Cookie("playerId")
+	cookie, err := r.Cookie(playerIdCookieName)
 	if err != nil {
-		http.Error(w, "Missing playerId cookie", http.StatusBadRequest)
-		return
+		return "", fmt.Errorf("missing %s cookie", playerIdCookieName)
 	}
-	playerId := cookie.Value
+	return cookie.Value, nil
+}
+
+func handleMove(w http.ResponseWriter, r *http.Request) {
+	playerId, err := validatePostRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+	}
 	dec := json.NewDecoder(r.Body)
 	var req MoveRequest
 	if err := dec.Decode(&req); err != nil {
@@ -445,14 +482,33 @@ func handleMove(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("No game with ID %q", gameId), http.StatusNotFound)
 		return
 	}
-	log.Printf("Received move request from %s: (%d, %d)", playerId, req.Row, req.Col)
 	game.ControlChan <- ControlEventMove{PlayerId: playerId, Row: req.Row, Col: req.Col}
+}
+
+func handleReset(w http.ResponseWriter, r *http.Request) {
+	playerId, err := validatePostRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+	}
+	dec := json.NewDecoder(r.Body)
+	var req ResetRequest
+	if err := dec.Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+	}
+	gameId := gameIdFromPath(r.URL.Path)
+	game := lookupGame(gameId)
+	if game == nil {
+		http.Error(w, fmt.Sprintf("No game with ID %q", gameId), http.StatusNotFound)
+		return
+	}
+	game.ControlChan <- ControlEventReset{playerId: playerId, message: req.Message}
+
 }
 
 func handleSse(w http.ResponseWriter, r *http.Request) {
 	log.Print("Incoming SSE request: ", r.URL.Path)
 	// We expect a cookie to identify the player.
-	cookie, err := r.Cookie("playerId")
+	cookie, err := r.Cookie(playerIdCookieName)
 	if err != nil {
 		log.Printf("SSE request without cookie from %s", r.RemoteAddr)
 		http.Error(w, "Missing playerId cookie", http.StatusBadRequest)
@@ -465,7 +521,7 @@ func handleSse(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("Game %s does not exist", gameId), http.StatusNotFound)
 		return
 	}
-	serverEventChan := game.addEventListener(playerId)
+	serverEventChan := game.registerPlayer(playerId)
 	// Headers to establish server-sent events (SSE) communication.
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-store")
@@ -485,18 +541,18 @@ func handleSse(w http.ResponseWriter, r *http.Request) {
 			}
 		case <-r.Context().Done():
 			log.Printf("Client %s disconnected", r.RemoteAddr)
-			game.removeEventListener(playerId)
+			game.unregisterPlayer(playerId)
 			return
 		}
 	}
 }
 
 func handleGame(w http.ResponseWriter, r *http.Request) {
-	_, err := r.Cookie("playerId")
+	_, err := r.Cookie(playerIdCookieName)
 	if err != nil {
 		playerId := generatePlayerId()
 		cookie := &http.Cookie{
-			Name:     "playerId",
+			Name:     playerIdCookieName,
 			Value:    playerId,
 			Path:     "/hexz",
 			MaxAge:   24 * 60 * 60,
@@ -526,6 +582,7 @@ func main() {
 		log.Fatal("Cannot load game HTML: ", err)
 	}
 	http.HandleFunc("/hexz/move/", handleMove)
+	http.HandleFunc("/hexz/reset/", handleReset)
 	http.HandleFunc("/hexz/sse/", handleSse)
 	http.HandleFunc("/hexz", handleHexz)
 	http.HandleFunc("/hexz/", handleGame)
