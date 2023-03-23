@@ -55,10 +55,11 @@ type Field struct {
 }
 
 type Board struct {
-	Turn   int       `json:"turn"`
-	Move   int       `json:"move"`
-	Fields [][]Field `json:"fields"`
-	Score  []int     `json:"score"` // Always two elements
+	Turn         int       `json:"turn"`
+	Move         int       `json:"move"`
+	LastRevealed int       `json:"-"`
+	Fields       [][]Field `json:"fields"`
+	Score        []int     `json:"score"` // Always two elements
 }
 
 type ServerEvent struct {
@@ -357,11 +358,14 @@ func gameMaster(game *Game) {
 					break
 				}
 				numOccupiedFields := 0
+				conflict := false
 				if board.Fields[e.Row][e.Col].Value > 0 {
 					if board.Fields[e.Row][e.Col].Value == 2 && board.Fields[e.Row][e.Col].Owner != board.Turn {
 						// Conflicting hidden moves. Leads to dead cell.
 						board.Fields[e.Row][e.Col].Value = 3
 						board.Fields[e.Row][e.Col].Owner = 0
+						board.Move++
+						conflict = true
 					} else {
 						// Cannot make move on already occupied field.
 						break
@@ -369,15 +373,15 @@ func gameMaster(game *Game) {
 				} else {
 					// Free cell: occupy it.
 					numOccupiedFields = occupyFields(board, playerNum, e.Row, e.Col)
+					board.Move++
 				}
-				board.Move++
 				// Update turn.
 				board.Turn++
 				if board.Turn > numPlayers {
 					board.Turn = 1
 				}
-				if numOccupiedFields > 1 || board.Move%4 == 0 {
-					// Make hidden moves visible.
+				if numOccupiedFields > 1 || board.Move-board.LastRevealed == 4 || conflict {
+					// Reveal hidden moves.
 					for r := 0; r < len(board.Fields); r++ {
 						for c := 0; c < len(board.Fields[r]); c++ {
 							if board.Fields[r][c].Value == 2 {
@@ -385,6 +389,7 @@ func gameMaster(game *Game) {
 							}
 						}
 					}
+					board.LastRevealed = board.Move
 				}
 				recomputeScore(board)
 				broadcast(ServerEvent{Board: board})
