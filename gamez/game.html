@@ -266,11 +266,10 @@
             });
             document.getElementById("home").addEventListener('click', newGame);
             document.getElementById("reset").addEventListener('click', resetGame);
-            document.getElementById("shareLink").addEventListener('click', function() {
+            document.getElementById("shareLink").addEventListener('click', async function() {
                 try {
-                    navigator.clipboard.writeText(window.location.href).then(() => {
-                        console.log("Copied URL to clipboard.");
-                    });
+                    await navigator.clipboard.writeText(window.location.href);
+                    console.log("Copied URL to clipboard.");
                 } catch (err) {
                     console.log("Cannot copy to clipboard:", err);
                 }

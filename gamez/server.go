@@ -22,7 +22,8 @@ var (
 	serverPort         = flag.Int("port", 8084, "Port on which to listen")
 	gameGcDelaySeconds = flag.Int("gcdelay", 5,
 		"Seconds to wait before deleting a disconnected player from a game")
-
+	tlsCertChain    = flag.String("tls-cert", "", "Path to chain.pem for TLS")
+	tlsPrivKey      = flag.String("tls-key", "", "Path to privkey.pem for TLS")
 	ongoingGames    = make(map[string]*Game)
 	ongoingGamesMut sync.Mutex
 )
@@ -622,5 +623,8 @@ func main() {
 
 	addr := fmt.Sprintf("%s:%d", *serverAddress, *serverPort)
 	log.Printf("Listening on %s", addr)
+	if *tlsCertChain != "" && *tlsPrivKey != "" {
+		log.Fatal(http.ListenAndServeTLS(addr, *tlsCertChain, *tlsPrivKey, nil))
+	}
 	log.Fatal(http.ListenAndServe(addr, nil))
 }
