@@ -56,6 +56,7 @@ type Field struct {
 
 type Board struct {
 	Turn   int       `json:"turn"`
+	Move   int       `json:"move"`
 	Fields [][]Field `json:"fields"`
 	Score  []int     `json:"score"` // Always two elements
 }
@@ -171,7 +172,7 @@ func recomputeScore(b *Board) {
 	for _, row := range b.Fields {
 		for _, fld := range row {
 			if fld.Owner > 0 {
-				s[fld.Owner-1] += fld.Value
+				s[fld.Owner-1] += 1
 			}
 		}
 	}
@@ -227,7 +228,7 @@ func floodFill(b *Board, x idx, cb func(idx) bool) {
 	}
 }
 
-func occupyFields(b *Board, playerNum, i, j int) {
+func occupyFields(b *Board, playerNum, i, j int) int {
 	// Create a copy of the board that indicates which neighboring cell of (i, j)
 	// it shares the free or opponent's area with.
 	// Then find the smallest of these areas and occupy every free cell in it.
@@ -235,7 +236,7 @@ func occupyFields(b *Board, playerNum, i, j int) {
 	for k := 0; k < len(ms); k++ {
 		ms[k] = make([]int8, len(b.Fields[k]))
 	}
-	b.Fields[i][j].Value = 1
+	b.Fields[i][j].Value = 2
 	b.Fields[i][j].Owner = playerNum
 	areaSizes := make(map[int8]int)
 	var ns [6]idx
@@ -259,6 +260,7 @@ func occupyFields(b *Board, playerNum, i, j int) {
 	}
 	// If there is more than one area, we know we introduced a split, since the areas
 	// would have been connected by the previously free cell (i, j).
+	numFields := 0
 	if len(areaSizes) > 1 {
 		minN := int8(0)
 		for n, cnt := range areaSizes {
@@ -269,12 +271,14 @@ func occupyFields(b *Board, playerNum, i, j int) {
 		for r := 0; r < len(b.Fields); r++ {
 			for c := 0; c < len(b.Fields[r]); c++ {
 				if ms[r][c] == minN {
+					numFields++
 					b.Fields[r][c].Value = 1
 					b.Fields[r][c].Owner = playerNum
 				}
 			}
 		}
 	}
+	return numFields
 }
 
 // Controller function for a running game. To be executed by a dedicated goroutine.
@@ -352,15 +356,35 @@ func gameMaster(game *Game) {
 					// Invalid field indices.
 					break
 				}
+				numOccupiedFields := 0
 				if board.Fields[e.Row][e.Col].Value > 0 {
-					// Cannot make move on already occupied field.
+					if board.Fields[e.Row][e.Col].Value == 2 && board.Fields[e.Row][e.Col].Owner != board.Turn {
+						// Conflicting hidden moves. Leads to dead cell.
+						board.Fields[e.Row][e.Col].Value = 3
+						board.Fields[e.Row][e.Col].Owner = 0
+					} else {
+						// Cannot make move on already occupied field.
+						break
+					}
+				} else {
+					// Free cell: occupy it.
+					numOccupiedFields = occupyFields(board, playerNum, e.Row, e.Col)
 				}
-				// Occupy fields.
-				occupyFields(board, playerNum, e.Row, e.Col)
+				board.Move++
 				// Update turn.
 				board.Turn++
 				if board.Turn > numPlayers {
 					board.Turn = 1
+				}
+				if numOccupiedFields > 1 || board.Move%4 == 0 {
+					// Make hidden moves visible.
+					for r := 0; r < len(board.Fields); r++ {
+						for c := 0; c < len(board.Fields[r]); c++ {
+							if board.Fields[r][c].Value == 2 {
+								board.Fields[r][c].Value = 1
+							}
+						}
+					}
 				}
 				recomputeScore(board)
 				broadcast(ServerEvent{Board: board})

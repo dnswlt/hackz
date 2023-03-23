@@ -58,6 +58,7 @@
                 }),
             })
         }
+
         const gstate = {
             board: null,
             role: 0,
@@ -165,8 +166,15 @@
                     let y = i * a * 3 / 2 + a;
                     let fld = gstate.board.fields[i][j];
                     ctx.translate(x, y);
-                    if (fld.value != 0) {
+                    if (fld.value == 1) {
                         ctx.fillStyle = styles.colors.players[fld.owner - 1];
+                        ctx.fill(hex);
+                    } else if (fld.value == 2 && gstate.role == 0 || gstate.role == fld.owner ) {
+                        // Only show hidden moves of this player.
+                        ctx.fillStyle = styles.colors.preliminaryMoves[fld.owner - 1];
+                        ctx.fill(hex);
+                    } else if (fld.value == 3) {
+                        ctx.fillStyle = styles.colors.deadCell;
                         ctx.fill(hex);
                     }
                     ctx.strokeStyle = styles.colors.grid;
@@ -261,6 +269,8 @@
             colors: {
                 grid: '#cbcbcb',
                 players: ['#255ab4', '#f8d748'],
+                preliminaryMoves: ['#92acd9', '#fbeba3'], // 50% alpha of players
+                deadCell: '#d03d12'
             },
         };
 
