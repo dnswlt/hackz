@@ -20,15 +20,50 @@
         }
 
         .menu {
-            padding-left: 2px;
-            padding-right: 2px;
+            padding-left: 5px;
+            padding-right: 5px;
         }
 
         .menuitem {
             display: inline;
+            margin-right: 1ex;
+        }
+
+        .widget {
+            margin-top: 6px;
+        }
+
+        #playerOneBadge, #playerTwoBadge {
+            /* padding-right: 2em; */
+            display: inline-block;
+            width: 2.5em;
+            text-align: center;
+        }
+        #playerOneBadge {
+            color: #cbcbcb;
+            background-color: #255ab4;
+        }
+        #playerTwoBadge {
+            color: #1e1e1e;
+            background-color: #f8d748;
+        }
+        #shareLink {
+            cursor: pointer;
+        }
+        a:link, a:visited, a:hover, a:active{
+            color: #92acd9;
         }
     </style>
     <script type="text/javascript">
+        const styles = {
+            colors: {
+                grid: '#cbcbcb',
+                players: ['#255ab4', '#f8d748'],
+                preliminaryMoves: ['#92acd9', '#fbeba3'], // 50% alpha of players
+                deadCell: '#d03d12'
+            },
+        };
+
         function gameId() {
             let pathSegs = window.location.pathname.split("/");
             return pathSegs[pathSegs.length - 1];
@@ -67,6 +102,15 @@
         function handleServerEvent(serverEvent) {
             if (serverEvent.role > 0) {
                 gstate.role = serverEvent.role;
+                let elt = null;
+                if (gstate.role == 1) {
+                    elt = document.getElementById("playerOneBadge");
+                } else if (gstate.role == 2) {
+                    elt = document.getElementById("playerTwoBadge");
+                }
+                if (elt != null) {
+                    elt.innerHTML = "You";
+                }
             }
             if (serverEvent.board != null) {
                 // new board received.
@@ -130,10 +174,15 @@
     <div id="controls" class="menu">
         <button id="home" class="menuitem" onclick="newGame()">New Game</button>
         <button id="reset" class="menuitem" onclick="resetGame()">Reset</button>
-        <div class="menuitem" id="scoreInfo"></div>
+        <div class="menuitem">
+            <span id="playerOneBadge">&nbsp;</span>
+            <span id="scoreInfo">0 &ndash; 0</span>
+            <span id="playerTwoBadge">&nbsp;</span>
+        </div>
         <div class="menuitem" id="turnInfo"></div>
-        <div class="menuitem" id="activeGames"></div>
+        <div class="menuitem" id="shareLink">&#x1F517; Share</div>
     </div>
+    <div class="widget" id="activeGames"></div>
 
     <script type="text/javascript">
         // Returns a Path2D representing a 0-centered hexagon with side length a.
@@ -169,7 +218,7 @@
                     if (fld.value == 1) {
                         ctx.fillStyle = styles.colors.players[fld.owner - 1];
                         ctx.fill(hex);
-                    } else if (fld.value == 2 && gstate.role == 0 || gstate.role == fld.owner ) {
+                    } else if (fld.value == 2 && gstate.role == 0 || gstate.role == fld.owner) {
                         // Only show hidden moves of this player.
                         ctx.fillStyle = styles.colors.preliminaryMoves[fld.owner - 1];
                         ctx.fill(hex);
@@ -196,9 +245,10 @@
 
         function resizeCanvas() {
             const canvas = document.getElementById("canvas");
+            const maxWidth = 800;
             const defaultWidth = 560;
             const defaultHeight = 550;
-            canvas.width = document.body.clientWidth;
+            canvas.width = Math.min(maxWidth, document.body.clientWidth);
             canvas.height = Math.ceil(canvas.width * (defaultHeight / defaultWidth));
             pad = canvas.width < 500 ? 10 : 20;
             hexagonSideLength = (canvas.width - 2 * pad) / (10 * Math.sqrt(3));
@@ -213,6 +263,17 @@
             canvas.addEventListener("contextmenu", e => {
                 e.preventDefault();
                 onCanvasClicked(e);
+            });
+            document.getElementById("home").addEventListener('click', newGame);
+            document.getElementById("reset").addEventListener('click', resetGame);
+            document.getElementById("shareLink").addEventListener('click', function() {
+                try {
+                    navigator.clipboard.writeText(window.location.href).then(() => {
+                        console.log("Copied URL to clipboard.");
+                    });
+                } catch (err) {
+                    console.log("Cannot copy to clipboard:", err);
+                }
             });
 
             const evtSource = new EventSource("/hexz/sse/" + gameId());
@@ -264,15 +325,6 @@
 
         var hexagonSideLength = 30;
         var pad = 20;
-
-        const styles = {
-            colors: {
-                grid: '#cbcbcb',
-                players: ['#255ab4', '#f8d748'],
-                preliminaryMoves: ['#92acd9', '#fbeba3'], // 50% alpha of players
-                deadCell: '#d03d12'
-            },
-        };
 
         initialize();
 

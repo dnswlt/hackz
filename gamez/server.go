@@ -476,7 +476,7 @@ func listRecentGames(limit int) []string {
 }
 
 func handleHexz(w http.ResponseWriter, r *http.Request) {
-	// For now, immediately redirect to a new game.
+	// For now, immediately create a new game and redirect to it.
 	game, err := startNewGame()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusPreconditionFailed)
@@ -600,6 +600,9 @@ func handleGame(w http.ResponseWriter, r *http.Request) {
 }
 
 func defaultHandler(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path == "/" {
+		http.Redirect(w, r, "/hexz", http.StatusSeeOther)
+	}
 	// Ignore
 	log.Print("Ignoring request for path: ", r.URL.Path, r.URL.RawQuery)
 }
