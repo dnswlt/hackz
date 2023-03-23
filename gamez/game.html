@@ -11,15 +11,19 @@
             width: 100%;
             height: 100%;
             margin: 0;
+            background-color: #1e1e1e;
+            color: #cbcbcb;
         }
 
         body {
             font-family: arial, sans-serif;
         }
+
         .menu {
             padding-left: 2px;
             padding-right: 2px;
         }
+
         .menuitem {
             display: inline;
         }
@@ -97,19 +101,19 @@
 
         function updateActiveGames(gameIds) {
             let div = document.getElementById("activeGames");
-                let html = ["Other games: "];
-                let ownId = gameId();
-                for (gId of gameIds) {
-                    if (gId != ownId) {
-                        html.push(`<a href="/hexz/${gId}">${gId}</a>`);
-                    }
+            let html = ["Other games: "];
+            let ownId = gameId();
+            for (gId of gameIds) {
+                if (gId != ownId) {
+                    html.push(`<a href="/hexz/${gId}">${gId}</a>`);
                 }
-                if (html.length > 1) {
-                    div.innerHTML = html.join(" ");
-                } else {
-                    // No other ongoing games.
-                    div.innerHTML = "";
-                }
+            }
+            if (html.length > 1) {
+                div.innerHTML = html.join(" ");
+            } else {
+                // No other ongoing games.
+                div.innerHTML = "";
+            }
         }
 
         function newGame() {
@@ -194,43 +198,52 @@
         }
 
         function initialize() {
-
             window.addEventListener('resize', resizeCanvas);
             resizeCanvas();
 
-            canvas.addEventListener('click', function (event) {
-                const c = document.getElementById("canvas");
-                const ctx = canvas.getContext("2d");
-                ctx.resetTransform();
-                ctx.translate(pad, pad);
-                let a = hexagonSideLength;
-                let b = Math.sqrt(3) * a;
-                let nRows = gstate.board.fields.length;
-                let hex = hexagon(a);
-                for (let i = 0; i < nRows; i++) {
-                    for (let j = 0; j < gstate.board.fields[i].length; j++) {
-                        let xOff = (i % 2 == 0) ? 0 : b / 2;
-                        let x = xOff + j * b + b / 2;
-                        let y = i * a * 3 / 2 + a;
-                        ctx.translate(x, y);
-                        if (ctx.isPointInPath(hex, event.offsetX, event.offsetY)) {
-                            clickedOnField(i, j);
-                            break;
-                        }
-                        ctx.translate(-x, -y);
-                    }
-                }
-                ctx.resetTransform();
+            canvas.addEventListener('click', onCanvasClicked);
+            canvas.addEventListener("contextmenu", e => {
+                e.preventDefault();
+                onCanvasClicked(e);
             });
 
             const evtSource = new EventSource("/hexz/sse/" + gameId());
             evtSource.onmessage = (event) => {
-                const serverEvent = JSON.parse(event.data);
-                handleServerEvent(serverEvent);
+                handleServerEvent(JSON.parse(event.data));
             }
             evtSource.onerror = (err) => {
                 // Do nothing for now, the Browser will try to reconnect.
             }
+        }
+
+        function onCanvasClicked(event) {
+            if (event.button != 0 || event.altKey || event.metaKey || event.ctrlKey || event.shiftKey) {
+                const e = event;
+                console.log(`Click event: button=${e.button} altKey=${e.altKey} metaKey=${e.metaKey} ctrlKey=${e.ctrlKey} shiftKey=${e.shiftKey}`);
+                return;
+            }
+            const c = document.getElementById("canvas");
+            const ctx = canvas.getContext("2d");
+            ctx.resetTransform();
+            ctx.translate(pad, pad);
+            let a = hexagonSideLength;
+            let b = Math.sqrt(3) * a;
+            let nRows = gstate.board.fields.length;
+            let hex = hexagon(a);
+            for (let i = 0; i < nRows; i++) {
+                for (let j = 0; j < gstate.board.fields[i].length; j++) {
+                    let xOff = (i % 2 == 0) ? 0 : b / 2;
+                    let x = xOff + j * b + b / 2;
+                    let y = i * a * 3 / 2 + a;
+                    ctx.translate(x, y);
+                    if (ctx.isPointInPath(hex, event.offsetX, event.offsetY)) {
+                        clickedOnField(i, j);
+                        break;
+                    }
+                    ctx.translate(-x, -y);
+                }
+            }
+            ctx.resetTransform();
         }
 
         function clickedOnField(row, col) {
@@ -246,7 +259,7 @@
 
         const styles = {
             colors: {
-                grid: '#000000',
+                grid: '#cbcbcb',
                 players: ['#255ab4', '#f8d748'],
             },
         };
