@@ -68,11 +68,13 @@ type Board struct {
 }
 
 type ServerEvent struct {
-	Timestamp    string   `json:"timestamp"`
-	Board        *Board   `json:"board"`
-	Role         int      `json:"role"` // 0: spectator, 1, 2: players
-	DebugMessage string   `json:"debugMessage"`
-	ActiveGames  []string `json:"activeGames"`
+	Timestamp     string   `json:"timestamp"`
+	Board         *Board   `json:"board"`
+	Role          int      `json:"role"` // 0: spectator, 1, 2: players
+	Announcements []string `json:"announcements"`
+	DebugMessage  string   `json:"debugMessage"`
+	ActiveGames   []string `json:"activeGames"`
+	LastEvent     bool     `json:"lastEvent"` // True only on the last SSE event.
 }
 
 // JSON for incoming requests from UI clients.
@@ -342,6 +344,13 @@ func gameMaster(game *Game) {
 				e.ReplyChan <- ch
 				// Send board and player role initially so client can display the UI.
 				singlecast(e.PlayerId, ServerEvent{Board: board, ActiveGames: listRecentGames(5), Role: players[e.PlayerId]})
+				if players[e.PlayerId] == 1 {
+					announcement := "Welcome player 1! Waiting for player 2."
+					broadcast(ServerEvent{Announcements: []string{announcement}})
+				} else if players[e.PlayerId] == 2 {
+					announcement := "Player 2 joined. The game begins."
+					broadcast(ServerEvent{Announcements: []string{announcement}})
+				}
 			case ControlEventUnregister:
 				delete(eventListeners, e.PlayerId)
 				if _, ok := playerGcCancel[e.PlayerId]; ok {
@@ -422,16 +431,14 @@ func gameMaster(game *Game) {
 				// Ignore zombie GC message. Player has already reconnected.
 				log.Printf("Ignoring GC message for player %s in game %s", playerId, game.Id)
 			}
-			log.Printf("Player %s has left game %s", playerId, game.Id)
-			delete(eventListeners, playerId)
-			delete(players, playerId)
-			delete(playerGcCancel, playerId)
-			if len(players) == 0 {
-				// No more players left: end the game.
-				log.Printf("Game %s has no players left. Finishing.", game.Id)
-				deleteGame(game.Id)
-				return
-			}
+			log.Printf("Player %s has left game %s. Game over.", playerId, game.Id)
+			playerNum := players[playerId]
+			broadcast(ServerEvent{
+				Announcements: []string{fmt.Sprintf("Player %d left the game. Game over.", playerNum)},
+				LastEvent:     true,
+			})
+			deleteGame(game.Id)
+			return
 		}
 	}
 }
@@ -581,6 +588,11 @@ func handleSse(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprintf(w, "data: %s\n\n", buf.String())
 			if f, ok := w.(http.Flusher); ok {
 				f.Flush()
+			}
+			if ev.LastEvent {
+				// The game is over, time to close the SSE channel.
+				log.Printf("Closing SSE channel for player %s and game %s", playerId, gameId)
+				return
 			}
 		case <-r.Context().Done():
 			log.Printf("Client %s disconnected", r.RemoteAddr)

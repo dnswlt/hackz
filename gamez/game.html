@@ -111,19 +111,19 @@
         const gstate = {
             board: null,
             role: 0,
+            done: false,
         };
 
-        function handleServerEvent(serverEvent) {
+        function handleServerEvent(sse, serverEvent) {
             if (serverEvent.role > 0) {
                 gstate.role = serverEvent.role;
-                let elt = null;
-                if (gstate.role == 1) {
-                    elt = document.getElementById("playerOneBadge");
-                } else if (gstate.role == 2) {
-                    elt = document.getElementById("playerTwoBadge");
-                }
-                if (elt != null) {
-                    elt.innerHTML = "You";
+                let ps = [
+                    document.getElementById("playerOneBadge"),
+                    document.getElementById("playerTwoBadge"),
+                ];
+                if (gstate.role > 0) {
+                    let role = gstate.role - 1;
+                    ps[role].innerHTML = "You";
                 }
             }
             if (serverEvent.board != null) {
@@ -139,6 +139,27 @@
             if (serverEvent.activeGames && serverEvent.activeGames.length > 0) {
                 updateActiveGames(serverEvent.activeGames);
             }
+            if (serverEvent.lastEvent) {
+                console.log("Server sent last SSE. Closing the connection.");
+                gstate.done = true;
+                sse.close();
+            }
+            if (serverEvent.announcements && serverEvent.announcements.length > 0) {
+                updateAnnouncements(serverEvent);
+            }
+        }
+
+        function updateAnnouncements(serverEvent) {
+            let f2 = function(n) {
+                return String(n).padStart(2, '0');
+            }
+            let div = document.getElementById("announcements");
+            let time = new Date(serverEvent.timestamp);
+            let text = [];
+            for (const a of serverEvent.announcements) {
+                 text.push(`${f2(time.getHours())}:${f2(time.getMinutes())}:${f2(time.getSeconds())} - ${a}`);
+            }
+            div.innerHTML = text.join("<br>");
         }
 
         function updateScore() {
@@ -152,9 +173,9 @@
                 document.getElementById("playerOneTurnInfo"),
                 document.getElementById("playerTwoTurnInfo"),
             ];
-            let turn = gstate.board.turn-1;
+            let turn = gstate.board.turn - 1;
             ts[turn].style.visibility = 'visible';
-            ts[(turn+1)%2].style.visibility = 'hidden';
+            ts[(turn + 1) % 2].style.visibility = 'hidden';
         }
 
         function updateActiveGames(gameIds) {
@@ -197,6 +218,7 @@
         <div class="menuitem" id="turnInfo"></div>
         <div class="menuitem" id="shareLink">&#x1F517; Share</div>
     </div>
+    <div class="widget" id="announcements"></div>
     <div class="widget" id="activeGames"></div>
 
     <script type="text/javascript">
@@ -290,16 +312,19 @@
                 }
             });
 
-            const evtSource = new EventSource("/hexz/sse/" + gameId());
-            evtSource.onmessage = (event) => {
-                handleServerEvent(JSON.parse(event.data));
+            const eventSource = new EventSource("/hexz/sse/" + gameId());
+            eventSource.onmessage = (event) => {
+                handleServerEvent(eventSource, JSON.parse(event.data));
             }
-            evtSource.onerror = (err) => {
+            eventSource.onerror = (err) => {
                 // Do nothing for now, the Browser will try to reconnect.
             }
         }
 
         function onCanvasClicked(event) {
+            if (gstate.done) {
+                return;  // Do nothing if the game is over.
+            }
             if (event.button != 0 || event.altKey || event.metaKey || event.ctrlKey || event.shiftKey) {
                 const e = event;
                 console.log(`Click event: button=${e.button} altKey=${e.altKey} metaKey=${e.metaKey} ctrlKey=${e.ctrlKey} shiftKey=${e.shiftKey}`);
