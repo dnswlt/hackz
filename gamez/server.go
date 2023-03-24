@@ -10,6 +10,7 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"path"
 	"sort"
 	"strings"
 	"sync"
@@ -17,9 +18,9 @@ import (
 )
 
 var (
-	gameHtmlFile       = flag.String("html", "game.html", "Path to game HTML file")
 	serverAddress      = flag.String("address", "", "Address on which to listen")
 	serverPort         = flag.Int("port", 8084, "Port on which to listen")
+	documentRoot       = flag.String("document-root", ".", "Root directory from which to serve files")
 	gameGcDelaySeconds = flag.Int("gcdelay", 5,
 		"Seconds to wait before deleting a disconnected player from a game")
 	tlsCertChain    = flag.String("tls-cert", "", "Path to chain.pem for TLS")
@@ -35,14 +36,6 @@ const (
 	playerIdCookieName = "playerId"
 )
 
-func readGameHtml() (string, error) {
-	html, err := os.ReadFile(*gameHtmlFile)
-	if err != nil {
-		return "", err
-	}
-	return string(html), nil
-}
-
 type Game struct {
 	Id          string
 	Started     time.Time
@@ -55,12 +48,23 @@ type Field struct {
 	Owner int `json:"owner"` // Player number owning this field.
 }
 
+type GameState string
+
+const (
+	Initial                GameState = "initial"
+	WaitingForSecondPlayer GameState = "waiting"
+	Running                GameState = "running"
+	Finished               GameState = "finished"
+	Aborted                GameState = "aborted"
+)
+
 type Board struct {
 	Turn         int       `json:"turn"`
 	Move         int       `json:"move"`
-	LastRevealed int       `json:"-"`
+	LastRevealed int       `json:"-"` // Move at which fields were last revealed
 	Fields       [][]Field `json:"fields"`
 	Score        []int     `json:"score"` // Always two elements
+	State        GameState `json:"state"`
 }
 
 type ServerEvent struct {
@@ -120,6 +124,14 @@ func (g *Game) unregisterPlayer(playerId string) {
 	g.ControlChan <- ControlEventUnregister{PlayerId: playerId}
 }
 
+func readGameHtml() (string, error) {
+	html, err := os.ReadFile(path.Join(*documentRoot, "game.html"))
+	if err != nil {
+		return "", err
+	}
+	return string(html), nil
+}
+
 // Generates a random 128-bit hex string representing a player ID.
 func generatePlayerId() string {
 	p := make([]byte, 16)
@@ -161,12 +173,11 @@ func NewBoard() *Board {
 // Looks up the game ID from the URL path.
 func gameIdFromPath(path string) string {
 	pathSegs := strings.Split(path, "/")
-	gameId := ""
 	l := len(pathSegs)
-	if l > 0 {
-		gameId = pathSegs[l-1]
+	if l >= 2 && pathSegs[0] == "hexz" {
+		return pathSegs[1]
 	}
-	return gameId
+	return ""
 }
 
 func recomputeScore(b *Board) {
@@ -174,7 +185,7 @@ func recomputeScore(b *Board) {
 	for _, row := range b.Fields {
 		for _, fld := range row {
 			if fld.Owner > 0 {
-				s[fld.Owner-1] += 1
+				s[fld.Owner-1]++
 			}
 		}
 	}
@@ -189,8 +200,10 @@ func (b *Board) valid(x idx) bool {
 	return x.r >= 0 && x.r < len(b.Fields) && x.c >= 0 && x.c < len(b.Fields[x.r])
 }
 
+// Populates ns with valid indices of all neighbor cells. Returns the number of neighbor cells.
+// ns must have enough capacity to hold all neighbors. You should pass in a [6]idx slice.
 func (b *Board) neighbors(x idx, ns []idx) int {
-	shift := x.r & 1
+	shift := x.r & 1 // Depending on the row, neighbors below and above are shifted.
 	k := 0
 	ns[k] = idx{x.r, x.c + 1}
 	if b.valid(ns[k]) {
@@ -600,9 +613,24 @@ func handleGame(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, gameHtml)
 }
 
+func isFavicon(path string) bool {
+	return path == "/favicon-16x16.png" || path == "/favicon-32x32.png" ||
+		path == "/favicon-48x48.png" || path == "/apple-touch-icon.png"
+}
+
 func defaultHandler(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path == "/" {
 		http.Redirect(w, r, "/hexz", http.StatusSeeOther)
+	}
+	if isFavicon(r.URL.Path) {
+		ico, err := os.ReadFile(path.Join(*documentRoot, "images", path.Base(r.URL.Path)))
+		if err != nil {
+			http.Error(w, "favicon not found", http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "image/png")
+		w.Write(ico)
+		return
 	}
 	// Ignore
 	log.Print("Ignoring request for path: ", r.URL.Path, r.URL.RawQuery)
