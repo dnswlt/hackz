@@ -174,8 +174,8 @@ func NewBoard() *Board {
 func gameIdFromPath(path string) string {
 	pathSegs := strings.Split(path, "/")
 	l := len(pathSegs)
-	if l >= 2 && pathSegs[0] == "hexz" {
-		return pathSegs[1]
+	if l >= 2 && pathSegs[1] == "hexz" {
+		return pathSegs[l-1]
 	}
 	return ""
 }
