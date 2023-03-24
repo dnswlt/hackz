@@ -39,24 +39,32 @@
             margin-top: 6px;
         }
 
-        #playerOneBadge, #playerTwoBadge {
+        #playerOneBadge,
+        #playerTwoBadge {
             /* padding-right: 2em; */
             display: inline-block;
             width: 2.5em;
             text-align: center;
         }
+
         #playerOneBadge {
             color: #cbcbcb;
             background-color: #255ab4;
         }
+
         #playerTwoBadge {
             color: #1e1e1e;
             background-color: #f8d748;
         }
+
         #shareLink {
             cursor: pointer;
         }
-        a:link, a:visited, a:hover, a:active{
+
+        a:link,
+        a:visited,
+        a:hover,
+        a:active {
             color: #92acd9;
         }
     </style>
@@ -140,14 +148,13 @@
         }
 
         function updateTurnInfo() {
-            let div = document.getElementById("turnInfo");
-            if (gstate.role > 0) {
-                // one of the players
-                div.innerHTML = (gstate.board.turn == gstate.role) ? "Your turn" : "Opponent's turn";
-            } else {
-                // spectator
-                div.innerHTML = (gstate.board.turn == 1) ? "Blue's turn" : "Yellow's turn";
-            }
+            let ts = [
+                document.getElementById("playerOneTurnInfo"),
+                document.getElementById("playerTwoTurnInfo"),
+            ];
+            let turn = gstate.board.turn-1;
+            ts[turn].style.visibility = 'visible';
+            ts[(turn+1)%2].style.visibility = 'hidden';
         }
 
         function updateActiveGames(gameIds) {
@@ -182,7 +189,9 @@
         <button id="reset" class="menuitem" onclick="resetGame()">Reset</button>
         <div class="menuitem">
             <span id="playerOneBadge">&nbsp;</span>
+            <span id="playerOneTurnInfo">&bull;</span>
             <span id="scoreInfo">0 &ndash; 0</span>
+            <span id="playerTwoTurnInfo">&bull;</span>
             <span id="playerTwoBadge">&nbsp;</span>
         </div>
         <div class="menuitem" id="turnInfo"></div>
@@ -272,7 +281,7 @@
             });
             document.getElementById("home").addEventListener('click', newGame);
             document.getElementById("reset").addEventListener('click', resetGame);
-            document.getElementById("shareLink").addEventListener('click', async function() {
+            document.getElementById("shareLink").addEventListener('click', async function () {
                 try {
                     await navigator.clipboard.writeText(window.location.href);
                     console.log("Copied URL to clipboard.");
