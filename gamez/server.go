@@ -86,6 +86,10 @@ type ResetRequest struct {
 	Message string `json:"message"`
 }
 
+type StatuszResponse struct {
+	NumOngoingGames int `json:"numOngoingGames"`
+}
+
 // Control events are sent to the game master goroutine.
 type ControlEvent interface {
 	controlEventImpl() // Interface marker function
@@ -300,6 +304,7 @@ func occupyFields(b *Board, playerNum, i, j int) int {
 
 // Controller function for a running game. To be executed by a dedicated goroutine.
 func gameMaster(game *Game) {
+	log.Printf("New gameMaster started for game %s", game.Id)
 	const numPlayers = 2
 	gcTimeout := time.Duration(*gameGcDelaySeconds) * time.Second
 	board := NewBoard()
@@ -630,6 +635,18 @@ func isFavicon(path string) bool {
 		path == "/favicon-48x48.png" || path == "/apple-touch-icon.png"
 }
 
+func handleStatusz(w http.ResponseWriter, r *http.Request) {
+	var resp StatuszResponse
+	ongoingGamesMut.Lock()
+	resp.NumOngoingGames = len(ongoingGames)
+	ongoingGamesMut.Unlock()
+	enc := json.NewEncoder(w)
+	if err := enc.Encode(resp); err != nil {
+		http.Error(w, "Serialization error", http.StatusInternalServerError)
+		panic(fmt.Sprintf("Cannot serialize my own structs?! %s", err))
+	}
+}
+
 func defaultHandler(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path == "/" {
 		http.Redirect(w, r, "/hexz", http.StatusSeeOther)
@@ -659,6 +676,7 @@ func main() {
 	http.HandleFunc("/hexz/sse/", handleSse)
 	http.HandleFunc("/hexz", handleHexz)
 	http.HandleFunc("/hexz/", handleGame)
+	http.HandleFunc("/statusz", handleStatusz)
 	http.HandleFunc("/", defaultHandler)
 
 	addr := fmt.Sprintf("%s:%d", *serverAddress, *serverPort)
