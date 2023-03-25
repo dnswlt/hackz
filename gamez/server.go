@@ -37,9 +37,10 @@ const (
 )
 
 type Game struct {
-	Id          string
-	Started     time.Time
-	ControlChan chan ControlEvent // The channel to communicate with the game coordinating goroutine.
+	Id           string
+	Started      time.Time
+	controlEvent chan ControlEvent // The channel to communicate with the game coordinating goroutine.
+	done         chan struct{}     // Closed by the game master goroutine when it is done.
 }
 
 // JSON for server responses.
@@ -120,14 +121,25 @@ func (e ControlEventUnregister) controlEventImpl() {}
 func (e ControlEventMove) controlEventImpl()       {}
 func (e ControlEventReset) controlEventImpl()      {}
 
-func (g *Game) registerPlayer(playerId string) chan ServerEvent {
+func (g *Game) sendEvent(e ControlEvent) bool {
+	select {
+	case g.controlEvent <- e:
+		return true
+	case <-g.done:
+		return false
+	}
+}
+
+func (g *Game) registerPlayer(playerId string) (chan ServerEvent, error) {
 	ch := make(chan chan ServerEvent)
-	g.ControlChan <- ControlEventRegister{PlayerId: playerId, ReplyChan: ch}
-	return <-ch
+	if g.sendEvent(ControlEventRegister{PlayerId: playerId, ReplyChan: ch}) {
+		return <-ch, nil
+	}
+	return nil, fmt.Errorf("cannot register player %s in game %s: game over", playerId, g.Id)
 }
 
 func (g *Game) unregisterPlayer(playerId string) {
-	g.ControlChan <- ControlEventUnregister{PlayerId: playerId}
+	g.sendEvent(ControlEventUnregister{PlayerId: playerId})
 }
 
 func readGameHtml() (string, error) {
@@ -157,9 +169,10 @@ func generateGameId() string {
 
 func NewGame(id string) *Game {
 	return &Game{
-		Id:          id,
-		Started:     time.Now(),
-		ControlChan: make(chan ControlEvent),
+		Id:           id,
+		Started:      time.Now(),
+		controlEvent: make(chan ControlEvent),
+		done:         make(chan struct{}),
 	}
 }
 
@@ -304,13 +317,23 @@ func occupyFields(b *Board, playerNum, i, j int) int {
 
 // Controller function for a running game. To be executed by a dedicated goroutine.
 func gameMaster(game *Game) {
-	log.Printf("New gameMaster started for game %s", game.Id)
 	const numPlayers = 2
+	defer close(game.done)
+	defer deleteGame(game.Id)
+	log.Printf("New gameMaster started for game %s", game.Id)
 	gcTimeout := time.Duration(*gameGcDelaySeconds) * time.Second
 	board := NewBoard()
 	eventListeners := make(map[string]chan ServerEvent)
+	defer func() {
+		// Our protocol is to gracefully send one last message with .LastEvent = true.
+		// But let's make sure to signal the game is over in any case, so client SSE
+		// connections definitely get terminated.
+		for _, ch := range eventListeners {
+			close(ch)
+		}
+	}()
 	players := make(map[string]int) // playerId => player number (1, 2)
-	playerGcCancel := make(map[string]chan bool)
+	playerGcCancel := make(map[string]chan struct{})
 	gcChan := make(chan string)
 	broadcast := func(e ServerEvent) {
 		e.Timestamp = time.Now().Format(time.RFC3339)
@@ -327,14 +350,14 @@ func gameMaster(game *Game) {
 	for {
 		tick := time.After(5 * time.Second)
 		select {
-		case ce := <-game.ControlChan:
+		case ce := <-game.controlEvent:
 			switch e := ce.(type) {
 			case ControlEventRegister:
 				if _, ok := players[e.PlayerId]; ok {
 					// Player reconnected. Cancel its GC.
 					if cancel, ok := playerGcCancel[e.PlayerId]; ok {
 						log.Printf("Player %s reconnected. Cancelling GC.", e.PlayerId)
-						cancel <- true
+						close(cancel)
 						delete(playerGcCancel, e.PlayerId)
 					}
 				} else {
@@ -365,7 +388,7 @@ func gameMaster(game *Game) {
 				}
 				// Remove player after timeout. Don't remove them immediately as they might
 				// just be reloading their page and rejoin soon.
-				cancelChan := make(chan bool, 1)
+				cancelChan := make(chan struct{})
 				playerGcCancel[e.PlayerId] = cancelChan
 				go func(playerId string) {
 					t := time.After(gcTimeout)
@@ -442,7 +465,6 @@ func gameMaster(game *Game) {
 				Announcements: []string{fmt.Sprintf("Player %d left the game. Game over.", playerNum)},
 				LastEvent:     true,
 			})
-			deleteGame(game.Id)
 			return
 		}
 	}
@@ -537,7 +559,7 @@ func handleMove(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("No game with ID %q", gameId), http.StatusNotFound)
 		return
 	}
-	game.ControlChan <- ControlEventMove{PlayerId: playerId, Row: req.Row, Col: req.Col}
+	game.sendEvent(ControlEventMove{PlayerId: playerId, Row: req.Row, Col: req.Col})
 }
 
 func handleReset(w http.ResponseWriter, r *http.Request) {
@@ -556,12 +578,11 @@ func handleReset(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("No game with ID %q", gameId), http.StatusNotFound)
 		return
 	}
-	game.ControlChan <- ControlEventReset{playerId: playerId, message: req.Message}
+	game.sendEvent(ControlEventReset{playerId: playerId, message: req.Message})
 
 }
 
 func handleSse(w http.ResponseWriter, r *http.Request) {
-	log.Print("Incoming SSE request: ", r.URL.Path)
 	// We expect a cookie to identify the player.
 	cookie, err := r.Cookie(playerIdCookieName)
 	if err != nil {
@@ -576,13 +597,24 @@ func handleSse(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("Game %s does not exist", gameId), http.StatusNotFound)
 		return
 	}
-	serverEventChan := game.registerPlayer(playerId)
+	serverEventChan, err := game.registerPlayer(playerId)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusPreconditionFailed)
+		return
+	}
+	log.Printf("New SSE channel for player %s and game %s", playerId, game.Id)
 	// Headers to establish server-sent events (SSE) communication.
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-store")
 	for {
 		select {
-		case ev := <-serverEventChan:
+		case ev, ok := <-serverEventChan:
+			if !ok {
+				// Game over. This should be signalled properly through a last event having
+				// ".LastEvent == true", but let's play it safe.
+				log.Printf("Event channel closed for player %s in game %s", playerId, gameId)
+				return
+			}
 			// Send ServerEvent JSON on SSE connection.
 			var buf strings.Builder
 			enc := json.NewEncoder(&buf)
@@ -600,7 +632,7 @@ func handleSse(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		case <-r.Context().Done():
-			log.Printf("Client %s disconnected", r.RemoteAddr)
+			log.Printf("Player %s (%s) closed SSE channel", playerId, r.RemoteAddr)
 			game.unregisterPlayer(playerId)
 			return
 		}
