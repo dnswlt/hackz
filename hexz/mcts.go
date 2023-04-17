@@ -2,7 +2,6 @@ package hexz
 
 import (
 	"fmt"
-	"log"
 	"math"
 	"math/rand"
 	"strings"
@@ -10,13 +9,13 @@ import (
 )
 
 type mcNode struct {
-	r, c         int
+	r, c         int8
 	cellType     CellType
 	children     []*mcNode
-	wins         float64
-	count        float64
+	wins         float32
+	count        float32
 	done         bool
-	turn         int
+	turn         int8
 	liveChildren int // Number of child nodes that are not done yet.
 }
 
@@ -25,19 +24,19 @@ func (n *mcNode) String() string {
 		n.r, n.c, n.cellType, len(n.children), n.wins, n.count, n.done, n.turn, n.liveChildren)
 }
 
-func (n *mcNode) Q() float64 {
+func (n *mcNode) Q() float32 {
 	if n.count == 0 {
 		return 0
 	}
 	return n.wins / n.count
 }
 
-func (n *mcNode) U(parentCount float64, uctFactor float64) float64 {
+func (n *mcNode) U(parentCount float32, uctFactor float32) float32 {
 	if n.count == 0.0 {
 		// Never played => infinitely interesting
-		return math.Inf(1)
+		return float32(math.Inf(1))
 	}
-	return n.wins/n.count + uctFactor*math.Sqrt(math.Log(parentCount)/n.count)
+	return n.wins/n.count + uctFactor*float32(math.Sqrt(math.Log(float64(parentCount/n.count))))
 }
 
 func (n *mcNode) size() int {
@@ -51,17 +50,17 @@ func (n *mcNode) size() int {
 type MCTS struct {
 	rnd              *rand.Rand
 	MaxFlagPositions int // maximum number of (random) positions to consider for placing a flag in a single move.
-	UctFactor        float64
+	UctFactor        float32
 	FlagsFirst       bool // If true, flags will be played whenever possible.
 }
 
 func (mcts *MCTS) playRandomGame(ge SinglePlayerGameEngine, firstMove *mcNode) (winner int) {
 	b := ge.Board()
 	if !ge.MakeMove(GameEngineMove{
-		playerNum: firstMove.turn,
+		playerNum: int(firstMove.turn),
 		move:      b.Move,
-		row:       firstMove.r,
-		col:       firstMove.c,
+		row:       int(firstMove.r),
+		col:       int(firstMove.c),
 		cellType:  firstMove.cellType,
 	}) {
 		panic("Invalid move")
@@ -69,11 +68,10 @@ func (mcts *MCTS) playRandomGame(ge SinglePlayerGameEngine, firstMove *mcNode) (
 	for !ge.IsDone() {
 		m, err := ge.RandomMove()
 		if err != nil {
-			log.Fatalf("Could not suggest a move: %s", err.Error())
+			panic(fmt.Sprintf("Could not suggest a move: %s", err.Error()))
 		}
 		if !ge.MakeMove(m) {
-			log.Fatalf("Could not make a move")
-			return
+			panic("Could not make a move")
 		}
 	}
 	return ge.Winner()
@@ -81,7 +79,7 @@ func (mcts *MCTS) playRandomGame(ge SinglePlayerGameEngine, firstMove *mcNode) (
 
 func (mcts *MCTS) getNextByUtc(node *mcNode) *mcNode {
 	var next *mcNode
-	maxUct := -1.0
+	maxUct := float32(-1.0)
 	for _, l := range node.children {
 		if l.done {
 			continue
@@ -112,7 +110,7 @@ func (mcts *MCTS) nextMoves(node *mcNode, b *Board) []*mcNode {
 			}
 			if f.isAvail(b.Turn) {
 				cs = append(cs, &mcNode{
-					r: r, c: c, turn: b.Turn,
+					r: int8(r), c: int8(c), turn: int8(b.Turn),
 				})
 			}
 			if hasFlag && (mcts.rnd.Float64() < float64(maxFlags)/(float64(nFlags)+1)) {
@@ -122,7 +120,7 @@ func (mcts *MCTS) nextMoves(node *mcNode, b *Board) []*mcNode {
 					k = mcts.rnd.Intn(maxFlags)
 				}
 				flagMoves[k] = &mcNode{
-					r: r, c: c, turn: b.Turn, cellType: cellFlag,
+					r: int8(r), c: int8(c), turn: int8(b.Turn), cellType: cellFlag,
 				}
 				nFlags++
 			}
@@ -142,8 +140,9 @@ func (mcts *MCTS) nextMoves(node *mcNode, b *Board) []*mcNode {
 }
 
 func (mcts *MCTS) backpropagate(path []*mcNode, winner int) {
+	w := int8(winner)
 	for i := len(path) - 1; i >= 0; i-- {
-		if path[i].turn == winner {
+		if path[i].turn == w {
 			path[i].wins += 1
 		} else if winner == 0 {
 			path[i].wins += 0.5
@@ -178,7 +177,7 @@ func (mcts *MCTS) run(ge SinglePlayerGameEngine, path []*mcNode) (depth int) {
 		panic(fmt.Sprintf("No children left for node: %s", node.String()))
 	}
 	move := GameEngineMove{
-		playerNum: c.turn, move: b.Move, row: c.r, col: c.c, cellType: c.cellType,
+		playerNum: int(c.turn), move: b.Move, row: int(c.r), col: int(c.c), cellType: c.cellType,
 	}
 	if !ge.MakeMove(move) {
 		panic(fmt.Sprintf("Failed to make move %s", move.String()))
@@ -266,7 +265,7 @@ func NewMCTS() *MCTS {
 }
 
 func (mcts *MCTS) SuggestMove(gameEngine SinglePlayerGameEngine, maxDuration time.Duration) (GameEngineMove, *MCTSStats) {
-	root := &mcNode{turn: gameEngine.Board().Turn}
+	root := &mcNode{turn: int8(gameEngine.Board().Turn)}
 	started := time.Now()
 	maxDepth := 0
 	for n := 0; ; n++ {
@@ -303,19 +302,19 @@ func (mcts *MCTS) SuggestMove(gameEngine SinglePlayerGameEngine, maxDuration tim
 			best = c
 		}
 		stats.Moves[i] = MCTSMoveStats{
-			row:        c.r,
-			col:        c.c,
+			row:        int(c.r),
+			col:        int(c.c),
 			cellType:   c.cellType,
 			iterations: int(c.count),
-			U:          c.U(root.count, mcts.UctFactor),
-			Q:          c.Q(),
+			U:          float64(c.U(root.count, mcts.UctFactor)),
+			Q:          float64(c.Q()),
 		}
 	}
 	move := GameEngineMove{
-		playerNum: best.turn,
+		playerNum: int(best.turn),
 		move:      gameEngine.Board().Move,
-		row:       best.r,
-		col:       best.c,
+		row:       int(best.r),
+		col:       int(best.c),
 		cellType:  best.cellType,
 	}
 	return move, stats

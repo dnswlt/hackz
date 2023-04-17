@@ -85,7 +85,7 @@ func main() {
 		// Evaluate parameters both on P1 and P2
 		benchPlayer := nRuns%2 + 1
 		mcts[benchPlayer-1].MaxFlagPositions = *maxFlagPositions
-		mcts[benchPlayer-1].UctFactor = *uctFactor
+		mcts[benchPlayer-1].UctFactor = float32(*uctFactor)
 		mcts[benchPlayer-1].FlagsFirst = *flagsFirst
 
 	Gameloop:
