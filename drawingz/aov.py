@@ -19,18 +19,38 @@ html_tmpl = """<!DOCTYPE html>
         .annot {{
             font-size: 10pt;
         }}
+        .center {{
+            text-anchor: middle;
+        }}
+        .vcenter {{
+            dominant-baseline: middle;
+        }}
+        .ralign {{
+            text-anchor: end;
+        }}
+        .light {{
+            fill: #b0b0b0;
+        }}
+
     </style>
 </head>
 
 <body>
     <h1>Angle of view</h1>
 
-    <div id="svgs">
+    <div id="aov">
         <svg viewBox="{view_box}" width="{width}" height="{height}" xmlns="http://www.w3.org/2000/svg">
 {elements}
         </svg>
     </div>
-
+    
+    <h1>Hyperfocal distance</h1>
+    <p>Hyperfocal distance in meters for typical f-numbers.</p>
+    <div id="hfd">
+        <svg width="{hfd_width}" height="{hfd_height}" xmlns="http://www.w3.org/2000/svg">
+{hfd_elements}
+        </svg>
+    </div>
 </body>
 </html>
 """
@@ -41,6 +61,11 @@ def aovh(f):
 
 def aovv(f):
     return 2 * atan(24/(2*f))
+
+
+def hfd(focal_length, f_number, coc=0.03):
+    """Returns the hyperfocal distance in mm."""
+    return focal_length**2/(f_number*coc) + focal_length
 
 
 Arc = namedtuple('Arc', ['path', 'outline', 'x0', 'y0', 'x1', 'y1', 'r', 'phi'])
@@ -113,10 +138,39 @@ def main():
             elems.append(f'<path d="M {-x0} {y0} L {-x1} {y1}" stroke="black"/>')
         phi += step_degrees
         n += 1
+    # Add hfd elements.
+    x_spacing = 100
+    x_off = 30
+    hfd_width = 2*x_off + (len(focal_lengths)-1) * x_spacing + 40  # for trailing label text
+    hfd_height = 400
+    hfd_elems = []
+    f_numbers = [1.8, 2.8, 4, 5.6, 8, 11, 16]
+    y0, y1 = 10, hfd_height * 0.9
+    x = x_off
+    tick_length = 5
+    for f in focal_lengths:
+        hfd_elems.append(f'<path d="M {x} {y0} L {x} {y1}" stroke="black" fill="none"/>')
+        hfd_elems.append(f'<text class="annot center" x="{x}" y="{y1+16}">{f}</text>')
+        # One tick per f-number.
+        hfds = [hfd(f, n)/1000 for n in f_numbers]
+        print(f, hfds)
+        ys = [y0 + (y1-y0) * (1-h/hfds[0]) for h in hfds]
+        for f, h, y in zip(f_numbers, hfds, ys):
+            hfd_elems.append(f'<path d="M {x} {y} L {x+tick_length} {y}" stroke="black" fill="none"/>')
+            hfd_elems.append(f'<text class="annot vcenter" x="{x+tick_length+2}" y="{y}">{h:.2f}</text>')
+            hfd_elems.append(f'<text class="annot vcenter ralign light" x="{x-2}" y="{y}">{f:.1f}</text>')
+        x += x_spacing
     # Write HTML.
     with open('aov.html', 'w') as f_out:
         vb = f"{-a.r} {-r} {2*a.r} {r}"
-        f_out.write(html_tmpl.format(elements='\n'.join(elems), view_box=vb, width=ceil(2*a.r), height=ceil(r)))
+        f_out.write(html_tmpl.format(
+            elements='\n'.join(elems),
+            hfd_elements='\n'.join(hfd_elems),
+            view_box=vb, 
+            width=ceil(2*a.r), 
+            height=ceil(r),
+            hfd_width=hfd_width,
+            hfd_height=hfd_height))
 
 
 if __name__ == "__main__":
