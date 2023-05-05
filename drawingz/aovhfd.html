@@ -202,7 +202,7 @@
 
         function init(focalLengths = []) {
             if (focalLengths.length == 0) {
-                focalLengths = [14, 16, 20, 24, 35, 50, 85, 105, 135, 200];
+                focalLengths = [14, 16, 20, 24, 35, 50, 70, 85, 105, 135, 200];
             }
             const r0 = 400;
             let r = r0;
@@ -218,10 +218,43 @@
                 const lbl = new SvgText(String(f), seg.x1, seg.y1, classes = ["annot"]);
                 svg.appendChild(lbl.svg());
                 if (i == 0) {
+                    // Add arc with ticks for good measure.
                     const arc = svgArc(0, 0, r, up - phi / 2, up + phi / 2, { stroke: "black" })
                     topElems.push(arc);
+                    const stepRadians = 5 / 180 * Math.PI;
+                    let theta = 0;
+                    let n = 0;
+                    while (theta < phi / 2 - stepRadians / 5) {
+                        const ticklen = (n % 2 == 0) ? 10 : 6;
+                        const x1 = r * Math.cos(up - theta);
+                        const y1 = r * Math.sin(up - theta);
+                        const x2 = (r - ticklen) * Math.cos(up - theta);
+                        const y2 = (r - ticklen) * Math.sin(up - theta);
+                        topElems.push(new SvgLine(x1, y1, x2, y2, { stroke: "black" }));
+                        if (n > 0) {
+                            topElems.push(new SvgLine(-x1, y1, -x2, y2, { stroke: "black" }));
+                        }
+                        theta += stepRadians;
+                        n++;
+                    }
+
+                    // Add line for horizontal field of view scale.
                     const ln = new SvgLine(seg.x0, seg.y0, seg.x1, seg.y1, { stroke: "black" });
                     topElems.push(ln);
+                    // Assume the line is 10m away.
+                    const meter = Math.abs(seg.y0) / 10;
+                    let tx = 0;
+                    n = 0;
+                    const ty = seg.y1;
+                    while (tx < seg.x1 - meter / 2) {
+                        const ticklen = (n % 5 == 0) ? 5 : 3;
+                        topElems.push(new SvgLine(tx, ty - ticklen, tx, ty + ticklen, { stroke: "black" }));
+                        if (n > 0) {
+                            topElems.push(new SvgLine(-tx, ty - ticklen, -tx, ty + ticklen, { stroke: "black" }));
+                        }
+                        tx += meter;
+                        n++;
+                    }
                 }
                 r *= 1.05;
                 i++;
