@@ -46,6 +46,17 @@
     </div>
 
     <script>
+
+        // Returns the angle of view for the given focal length.
+        function aov(focal_length, sensor_width = 36) {
+            return 2 * Math.atan(sensor_width / (2 * focal_length));
+        }
+
+        // Returns the hyperfocal distance.
+        function hfd(focal_length, f_number, coc = 0.03) {
+            return (focal_length * focal_length) / (f_number * coc) + focal_length;
+        }
+
         function svgPath(p) {
             const path = document.createElementNS("http://www.w3.org/2000/svg", 'path');
             path.setAttribute("d", p.d);
@@ -64,13 +75,13 @@
         function svgCircleSegment(cx, cy, r, phi0, phi1, includeCenterPoint, style) {
             if (phi0 > phi1) {
                 // Ensure phi0 <= phi1.
-                phi0 -= Math.ceil((phi0-phi1)/(Math.PI*2)) * Math.PI * 2;
+                phi0 -= Math.ceil((phi0 - phi1) / (Math.PI * 2)) * Math.PI * 2;
             }
             const x0 = cx + r * Math.cos(phi0);
             const y0 = cy + r * Math.sin(phi0);
             const x1 = cx + r * Math.cos(phi1);
             const y1 = cy + r * Math.sin(phi1);
-            const large_arc_flag = +(phi1-phi0 > Math.PI);
+            const large_arc_flag = +(phi1 - phi0 > Math.PI);
             const sweep_flag = 1;  // always go clockwise (which looks like counter-clockwise due to the y-axis flip in SVG).
             let d = `M ${x0} ${y0} A ${r} ${r} 0 ${large_arc_flag} ${sweep_flag} ${x1} ${y1}`;
             if (includeCenterPoint) {
@@ -88,13 +99,13 @@
         function svgPie(cx, cy, r, phi0, phi1, style) {
             if (phi0 > phi1) {
                 // Ensure phi0 <= phi1.
-                phi0 -= Math.ceil((phi0-phi1)/(Math.PI*2)) * Math.PI * 2;
+                phi0 -= Math.ceil((phi0 - phi1) / (Math.PI * 2)) * Math.PI * 2;
             }
             const x0 = cx + r * Math.cos(phi0);
             const y0 = cy + r * Math.sin(phi0);
             const x1 = cx + r * Math.cos(phi1);
             const y1 = cy + r * Math.sin(phi1);
-            const large_arc_flag = +(phi1-phi0 > Math.PI);
+            const large_arc_flag = +(phi1 - phi0 > Math.PI);
             const sweep_flag = 1;  // always go clockwise (which looks like counter-clockwise due to the y-axis flip in SVG).
             return svgPath({
                 d: `M ${x0} ${y0} A ${r} ${r} 0 ${large_arc_flag} ${sweep_flag} ${x1} ${y1} L ${cx} ${cy} Z`,
@@ -108,19 +119,48 @@
             return svgCircleSegment(cx, cy, r, phi0, phi1, false, style);
         }
 
+        function svgText(text, x, y, classes = []) {
+            const t = document.createElementNS("http://www.w3.org/2000/svg", 'text');
+            t.textContent = text;
+            t.setAttribute("x", x);
+            t.setAttribute("y", y);
+            if (classes.length > 0) {
+                t.setAttribute("class", classes.join(" "));
+            }
+            return t;
+        }
+
+        function gray(x) {
+            const h = Math.round(255 * (0.4 + 0.5 * (1 - x)))
+            return `rgb(${h}, ${h}, ${h})`;
+        }
+
         function d2r(deg) {
-            return deg/180*Math.PI;
+            return deg / 180 * Math.PI;
         }
 
         function init() {
-            const aov = document.getElementById("aov_svg");
-            aov.setAttribute("width", 400);
-            aov.setAttribute("height", 400);
-            aov.setAttribute("viewBox", "0 0 400 400");
-            const pie = svgPie(200, 200, 130, d2r(270-30), d2r(270+30), {fill: "green"});
-            aov.appendChild(pie);
-            const arc = svgArc(200, 200, 130, d2r(270-30), d2r(270+30), {stroke: "red", "stroke-width": "3px"});
-            aov.appendChild(arc);
+            const focalLengths = [14, 16, 20, 24, 35, 50, 85, 105, 135, 200];
+            const r0 = 400;
+            let r = r0;
+            let i = 0;
+            const svg = document.getElementById("aov_svg");
+            for (const f of focalLengths) {
+                let phi = aov(f);
+                const seg = svgPie(0, 0, r, Math.PI * 3 / 2 - phi / 2, Math.PI * 3 / 2 + phi / 2, { fill: gray(i / (focalLengths.length - 1)) });
+                svg.appendChild(seg);
+                const lbl = svgText(String(f), -100, -100, classes = ["annot"]);
+                svg.appendChild(lbl);
+                r *= 1.05;
+                i++;
+            }
+            svg.setAttribute("width", 2 * r0);
+            svg.setAttribute("height", r);
+            svg.setAttribute("viewBox", `${-r0} ${-r} ${2 * r0} ${r}`);
+            // const pie = svgPie(200, 200, 130, d2r(270 - 30), d2r(270 + 30), { fill: "green" });
+            // svg.appendChild(pie);
+            // const arc = svgArc(200, 200, 130, d2r(270 - 30), d2r(270 + 30), { stroke: "red", "stroke-width": "3px" });
+            // svg.appendChild(arc);
         }
 
         init();
