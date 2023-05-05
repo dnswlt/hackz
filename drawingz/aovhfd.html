@@ -34,6 +34,10 @@
 
 <body>
     <h1>Horizontal angle and field of view</h1>
+    <div>
+        <input type="text" id="inpFocallengths">
+        <button id="cmdFocallengths">Foo!</button>
+    </div>
     <p>Ticks are at 5&deg; for angle of view and at 1m for field of view (for an object plane distance of 10m).</p>
     <div id="aov">
         <svg id="aov_svg" xmlns="http://www.w3.org/2000/svg"></svg>
@@ -72,62 +76,103 @@
             return path;
         }
 
-        function svgCircleSegment(cx, cy, r, phi0, phi1, includeCenterPoint, style) {
-            if (phi0 > phi1) {
-                // Ensure phi0 <= phi1.
-                phi0 -= Math.ceil((phi0 - phi1) / (Math.PI * 2)) * Math.PI * 2;
+        class SvgCircleSegment {
+            constructor(cx, cy, r, phi0, phi1, includeCenterPoint, style) {
+                if (phi0 > phi1) {
+                    // Ensure phi0 <= phi1.
+                    phi0 -= Math.ceil((phi0 - phi1) / (Math.PI * 2)) * Math.PI * 2;
+                }
+                this.cx = cx;
+                this.cy = cy;
+                this.r = r;
+                this.phi0 = phi0;
+                this.phi1 = phi1;
+                this.includeCenterPoint = includeCenterPoint;
+                this.style = style;
             }
-            const x0 = cx + r * Math.cos(phi0);
-            const y0 = cy + r * Math.sin(phi0);
-            const x1 = cx + r * Math.cos(phi1);
-            const y1 = cy + r * Math.sin(phi1);
-            const large_arc_flag = +(phi1 - phi0 > Math.PI);
-            const sweep_flag = 1;  // always go clockwise (which looks like counter-clockwise due to the y-axis flip in SVG).
-            let d = `M ${x0} ${y0} A ${r} ${r} 0 ${large_arc_flag} ${sweep_flag} ${x1} ${y1}`;
-            if (includeCenterPoint) {
-                d += ` L ${cx} ${cy} Z`;
+            get x0() {
+                return this.cx + this.r * Math.cos(this.phi0);
             }
-            return svgPath({
-                d: d,
-                style: style,
-            });
+            get y0() {
+                return this.cy + this.r * Math.sin(this.phi0);
+            }
+            get x1() {
+                return this.cx + this.r * Math.cos(this.phi1);
+            }
+            get y1() {
+                return this.cy + this.r * Math.sin(this.phi1);
+            }
+            svg() {
+                let large_arc_flag = +(this.phi1 - this.phi0 > Math.PI);
+                let sweep_flag = 1;  // always go clockwise (which looks like counter-clockwise due to the y-axis flip in SVG).
+                let d = `M ${this.x0} ${this.y0} A ${this.r} ${this.r} 0 ${large_arc_flag} ${sweep_flag} ${this.x1} ${this.y1}`;
+                if (this.includeCenterPoint) {
+                    d += ` L ${this.cx} ${this.cy} Z`;
+                }
+                return svgPath({
+                    d: d,
+                    style: this.style,
+                });
+            }
         }
 
         // Returns an SVG <path> representing a "pie", i.e. a segment of a circle.
         // The segment has its center at (cx, cy), a radius of r and spans the (radian) angular
         // range from phi0 to phi1.
         function svgPie(cx, cy, r, phi0, phi1, style) {
-            if (phi0 > phi1) {
-                // Ensure phi0 <= phi1.
-                phi0 -= Math.ceil((phi0 - phi1) / (Math.PI * 2)) * Math.PI * 2;
-            }
-            const x0 = cx + r * Math.cos(phi0);
-            const y0 = cy + r * Math.sin(phi0);
-            const x1 = cx + r * Math.cos(phi1);
-            const y1 = cy + r * Math.sin(phi1);
-            const large_arc_flag = +(phi1 - phi0 > Math.PI);
-            const sweep_flag = 1;  // always go clockwise (which looks like counter-clockwise due to the y-axis flip in SVG).
-            return svgPath({
-                d: `M ${x0} ${y0} A ${r} ${r} 0 ${large_arc_flag} ${sweep_flag} ${x1} ${y1} L ${cx} ${cy} Z`,
-                style: style,
-            });
+            return new SvgCircleSegment(cx, cy, r, phi0, phi1, true, style);
         }
 
         // Returns an SVG <path> representing a circle segment.
         function svgArc(cx, cy, r, phi0, phi1, style) {
             style.fill = "none";  // Never fill an arc.
-            return svgCircleSegment(cx, cy, r, phi0, phi1, false, style);
+            return new SvgCircleSegment(cx, cy, r, phi0, phi1, false, style);
         }
 
-        function svgText(text, x, y, classes = []) {
-            const t = document.createElementNS("http://www.w3.org/2000/svg", 'text');
-            t.textContent = text;
-            t.setAttribute("x", x);
-            t.setAttribute("y", y);
-            if (classes.length > 0) {
-                t.setAttribute("class", classes.join(" "));
+        class SvgLine {
+            constructor(x1, y1, x2, y2, style) {
+                this.x1 = x1;
+                this.y1 = y1;
+                this.x2 = x2;
+                this.y2 = y2;
+                this.style = style;
             }
-            return t;
+            get length() {
+                const dx = this.x2 - this.x1;
+                const dy = this.y2 - this.y1;
+                return Math.sqrt(dx * dx + dy * dy);
+            }
+            svg() {
+                const l = document.createElementNS("http://www.w3.org/2000/svg", 'line');
+                l.setAttribute("x1", this.x1);
+                l.setAttribute("y1", this.y1);
+                l.setAttribute("x2", this.x2);
+                l.setAttribute("y2", this.y2);
+                if (this.style) {
+                    Object.keys(this.style).forEach(k => { l.style[k] = this.style[k]; });
+                }
+                return l;
+            }
+        }
+
+        class SvgText {
+            constructor(text, x, y, classes = []) {
+                this.x = x;
+                this.y = y;
+                this.text = text;
+                this.classes = classes;
+            }
+
+            svg() {
+                const t = document.createElementNS("http://www.w3.org/2000/svg", 'text');
+                t.textContent = this.text;
+                t.setAttribute("x", this.x);
+                t.setAttribute("y", this.y);
+                if (this.classes.length > 0) {
+                    t.setAttribute("class", this.classes.join(" "));
+                }
+                return t;
+            }
         }
 
         function gray(x) {
@@ -139,21 +184,50 @@
             return deg / 180 * Math.PI;
         }
 
-        function init() {
-            const focalLengths = [14, 16, 20, 24, 35, 50, 85, 105, 135, 200];
+        function initEventListeners() {
+            const cmd = document.getElementById("cmdFocallengths");
+            cmd.addEventListener('click', e => {
+                const inp = document.getElementById("inpFocallengths");
+                const re = new RegExp("[ ,;]+");
+                const s = inp.value.trim();
+                if (!s) {
+                    return;
+                }
+                nums = s.split(re).map(n => Number(n)).filter(n => n > 0);
+                if (nums.length > 0) {
+                    init(nums);
+                }
+            });
+        }
+
+        function init(focalLengths = []) {
+            if (focalLengths.length == 0) {
+                focalLengths = [14, 16, 20, 24, 35, 50, 85, 105, 135, 200];
+            }
             const r0 = 400;
             let r = r0;
             let i = 0;
             const svg = document.getElementById("aov_svg");
+            svg.replaceChildren()
+            const up = Math.PI * 3 / 2;
+            let topElems = [];  // Elements that should be added last to appear on top.
             for (const f of focalLengths) {
                 let phi = aov(f);
-                const seg = svgPie(0, 0, r, Math.PI * 3 / 2 - phi / 2, Math.PI * 3 / 2 + phi / 2, { fill: gray(i / (focalLengths.length - 1)) });
-                svg.appendChild(seg);
-                const lbl = svgText(String(f), -100, -100, classes = ["annot"]);
-                svg.appendChild(lbl);
+                const seg = svgPie(0, 0, r, up - phi / 2, up + phi / 2, { fill: gray(i / (focalLengths.length - 1)) });
+                svg.appendChild(seg.svg());
+                const lbl = new SvgText(String(f), seg.x1, seg.y1, classes = ["annot"]);
+                svg.appendChild(lbl.svg());
+                if (i == 0) {
+                    const arc = svgArc(0, 0, r, up - phi / 2, up + phi / 2, { stroke: "black" })
+                    topElems.push(arc);
+                    const ln = new SvgLine(seg.x0, seg.y0, seg.x1, seg.y1, { stroke: "black" });
+                    topElems.push(ln);
+                }
                 r *= 1.05;
                 i++;
             }
+            topElems.forEach(e => svg.appendChild(e.svg()));
+
             svg.setAttribute("width", 2 * r0);
             svg.setAttribute("height", r);
             svg.setAttribute("viewBox", `${-r0} ${-r} ${2 * r0} ${r}`);
@@ -163,6 +237,7 @@
             // svg.appendChild(arc);
         }
 
+        initEventListeners();
         init();
     </script>
 </body>
