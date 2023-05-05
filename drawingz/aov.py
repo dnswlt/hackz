@@ -36,8 +36,8 @@ html_tmpl = """<!DOCTYPE html>
 </head>
 
 <body>
-    <h1>Angle of view</h1>
-
+    <h1>Horizontal angle and field of view</h1>
+    <p>Ticks are at 5&deg; for angle of view and at 1m for field of view (for an object plane distance of 10m).</p>
     <div id="aov">
         <svg viewBox="{view_box}" width="{width}" height="{height}" xmlns="http://www.w3.org/2000/svg">
 {elements}
@@ -45,7 +45,7 @@ html_tmpl = """<!DOCTYPE html>
     </div>
     
     <h1>Hyperfocal distance</h1>
-    <p>Hyperfocal distance in meters for typical f-numbers.</p>
+    <p>Hyperfocal distance in meters for typical f-numbers and a 35mm full frame sensor.</p>
     <div id="hfd">
         <svg width="{hfd_width}" height="{hfd_height}" xmlns="http://www.w3.org/2000/svg">
 {hfd_elements}

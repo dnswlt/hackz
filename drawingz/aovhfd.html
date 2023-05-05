@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Angle of view</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <style>
+        html {
+            font-family: sans-serif;
+        }
+
+        .annot {
+            font-size: 10pt;
+        }
+
+        .center {
+            text-anchor: middle;
+        }
+
+        .vcenter {
+            dominant-baseline: middle;
+        }
+
+        .ralign {
+            text-anchor: end;
+        }
+
+        .light {
+            fill: #b0b0b0;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Horizontal angle and field of view</h1>
+    <p>Ticks are at 5&deg; for angle of view and at 1m for field of view (for an object plane distance of 10m).</p>
+    <div id="aov">
+        <svg id="aov_svg" xmlns="http://www.w3.org/2000/svg"></svg>
+    </div>
+
+    <h1>Hyperfocal distance</h1>
+    <p>Hyperfocal distance in meters for typical f-numbers and a 35mm full frame sensor.</p>
+    <div id="hfd">
+        <svg id="hfd_svg" xmlns="http://www.w3.org/2000/svg"></svg>
+    </div>
+
+    <script>
+        function svgPath(p) {
+            const path = document.createElementNS("http://www.w3.org/2000/svg", 'path');
+            path.setAttribute("d", p.d);
+            if (p.fill) {
+                path.style.fill = p.fill;
+            }
+            if (p.stroke) {
+                path.style.stroke = p.stroke;
+            }
+            if (p.style) {
+                Object.keys(p.style).forEach(k => { path.style[k] = p.style[k]; });
+            }
+            return path;
+        }
+
+        function svgCircleSegment(cx, cy, r, phi0, phi1, includeCenterPoint, style) {
+            if (phi0 > phi1) {
+                // Ensure phi0 <= phi1.
+                phi0 -= Math.ceil((phi0-phi1)/(Math.PI*2)) * Math.PI * 2;
+            }
+            const x0 = cx + r * Math.cos(phi0);
+            const y0 = cy + r * Math.sin(phi0);
+            const x1 = cx + r * Math.cos(phi1);
+            const y1 = cy + r * Math.sin(phi1);
+            const large_arc_flag = +(phi1-phi0 > Math.PI);
+            const sweep_flag = 1;  // always go clockwise (which looks like counter-clockwise due to the y-axis flip in SVG).
+            let d = `M ${x0} ${y0} A ${r} ${r} 0 ${large_arc_flag} ${sweep_flag} ${x1} ${y1}`;
+            if (includeCenterPoint) {
+                d += ` L ${cx} ${cy} Z`;
+            }
+            return svgPath({
+                d: d,
+                style: style,
+            });
+        }
+
+        // Returns an SVG <path> representing a "pie", i.e. a segment of a circle.
+        // The segment has its center at (cx, cy), a radius of r and spans the (radian) angular
+        // range from phi0 to phi1.
+        function svgPie(cx, cy, r, phi0, phi1, style) {
+            if (phi0 > phi1) {
+                // Ensure phi0 <= phi1.
+                phi0 -= Math.ceil((phi0-phi1)/(Math.PI*2)) * Math.PI * 2;
+            }
+            const x0 = cx + r * Math.cos(phi0);
+            const y0 = cy + r * Math.sin(phi0);
+            const x1 = cx + r * Math.cos(phi1);
+            const y1 = cy + r * Math.sin(phi1);
+            const large_arc_flag = +(phi1-phi0 > Math.PI);
+            const sweep_flag = 1;  // always go clockwise (which looks like counter-clockwise due to the y-axis flip in SVG).
+            return svgPath({
+                d: `M ${x0} ${y0} A ${r} ${r} 0 ${large_arc_flag} ${sweep_flag} ${x1} ${y1} L ${cx} ${cy} Z`,
+                style: style,
+            });
+        }
+
+        // Returns an SVG <path> representing a circle segment.
+        function svgArc(cx, cy, r, phi0, phi1, style) {
+            style.fill = "none";  // Never fill an arc.
+            return svgCircleSegment(cx, cy, r, phi0, phi1, false, style);
+        }
+
+        function d2r(deg) {
+            return deg/180*Math.PI;
+        }
+
+        function init() {
+            const aov = document.getElementById("aov_svg");
+            aov.setAttribute("width", 400);
+            aov.setAttribute("height", 400);
+            aov.setAttribute("viewBox", "0 0 400 400");
+            const pie = svgPie(200, 200, 130, d2r(270-30), d2r(270+30), {fill: "green"});
+            aov.appendChild(pie);
+            const arc = svgArc(200, 200, 130, d2r(270-30), d2r(270+30), {stroke: "red", "stroke-width": "3px"});
+            aov.appendChild(arc);
+        }
+
+        init();
+    </script>
+</body>
+
+</html>
