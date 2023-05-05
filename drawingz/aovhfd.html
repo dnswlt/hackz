@@ -29,24 +29,32 @@
         .light {
             fill: #b0b0b0;
         }
+
+        @media print {
+            .no-print,
+            .no-print * {
+                display: none !important;
+            }
+        }
     </style>
 </head>
 
 <body>
     <h1>Horizontal angle and field of view</h1>
-    <div>
+    <div class="no-print">
+        Specify focal lengths (e.g. "30 50 120"):
         <input type="text" id="inpFocallengths">
-        <button id="cmdFocallengths">Foo!</button>
+        <button id="cmdFocallengths">Redraw</button>
     </div>
     <p>Ticks are at 5&deg; for angle of view and at 1m for field of view (for an object plane distance of 10m).</p>
     <div id="aov">
-        <svg id="aov_svg" xmlns="http://www.w3.org/2000/svg"></svg>
+        <svg id="svgAngleOfView" xmlns="http://www.w3.org/2000/svg"></svg>
     </div>
 
     <h1>Hyperfocal distance</h1>
     <p>Hyperfocal distance in meters for typical f-numbers and a 35mm full frame sensor.</p>
     <div id="hfd">
-        <svg id="hfd_svg" xmlns="http://www.w3.org/2000/svg"></svg>
+        <svg id="svgHyperfocal" xmlns="http://www.w3.org/2000/svg"></svg>
     </div>
 
     <script>
@@ -195,20 +203,18 @@
                 }
                 nums = s.split(re).map(n => Number(n)).filter(n => n > 0);
                 if (nums.length > 0) {
+                    nums.sort(function (a, b) { return a - b });
                     init(nums);
                 }
             });
         }
 
-        function init(focalLengths = []) {
-            if (focalLengths.length == 0) {
-                focalLengths = [14, 16, 20, 24, 35, 50, 70, 85, 105, 135, 200];
-            }
+        function initAngleOfView(focalLengths) {
             const r0 = 400;
             let r = r0;
             let i = 0;
-            const svg = document.getElementById("aov_svg");
-            svg.replaceChildren()
+            const svg = document.getElementById("svgAngleOfView");
+            svg.replaceChildren();
             const up = Math.PI * 3 / 2;
             let topElems = [];  // Elements that should be added last to appear on top.
             for (const f of focalLengths) {
@@ -264,10 +270,72 @@
             svg.setAttribute("width", 2 * r0);
             svg.setAttribute("height", r);
             svg.setAttribute("viewBox", `${-r0} ${-r} ${2 * r0} ${r}`);
-            // const pie = svgPie(200, 200, 130, d2r(270 - 30), d2r(270 + 30), { fill: "green" });
-            // svg.appendChild(pie);
-            // const arc = svgArc(200, 200, 130, d2r(270 - 30), d2r(270 + 30), { stroke: "red", "stroke-width": "3px" });
-            // svg.appendChild(arc);
+        }
+
+        function initHyperfocal(focalLengths) {
+            const svg = document.getElementById("svgHyperfocal");
+            svg.replaceChildren();
+            /*
+            x_spacing = 100
+    x_off = 30
+    hfd_width = 2*x_off + (len(focal_lengths)-1) * x_spacing + 40  # for trailing label text
+    hfd_height = 400
+    hfd_elems = []
+    f_numbers = [1.8, 2.8, 4, 5.6, 8, 11, 16]
+    y0, y1 = 10, hfd_height * 0.9
+    x = x_off
+    tick_length = 5
+    for f in focal_lengths:
+        hfd_elems.append(f'<path d="M {x} {y0} L {x} {y1}" stroke="black" fill="none"/>')
+        hfd_elems.append(f'<text class="annot center" x="{x}" y="{y1+16}">{f}</text>')
+        # One tick per f-number.
+        hfds = [hfd(f, n)/1000 for n in f_numbers]
+        print(f, hfds)
+        ys = [y0 + (y1-y0) * (1-h/hfds[0]) for h in hfds]
+        for f, h, y in zip(f_numbers, hfds, ys):
+            hfd_elems.append(f'<path d="M {x} {y} L {x+tick_length} {y}" stroke="black" fill="none"/>')
+            hfd_elems.append(f'<text class="annot vcenter" x="{x+tick_length+2}" y="{y}">{h:.2f}</text>')
+            hfd_elems.append(f'<text class="annot vcenter ralign light" x="{x-2}" y="{y}">{f:.1f}</text>')
+        x += x_spacing*/
+            const xSpacing = 90;
+            const xOff = 30;
+            const width = 2 * xOff + (focalLengths.length - 1) * xSpacing + 40  // 40 for trailing label text.
+            const height = 400;
+            const fNumbers = [1.8, 2.8, 4, 5.6, 8, 11, 16]
+            const [y1, y2] = [10, height * 0.9];
+            let x = xOff;
+            const ticklen = 5;
+            style = { stroke: "black" };
+            for (const f of focalLengths) {
+                const h = hfd(f,)
+                const p = new SvgLine(x, y1, x, y2, style);
+                svg.appendChild(p.svg());
+                const tf = new SvgText(String(f), x, y2 + 16, ["annot", "center"]);
+                svg.appendChild(tf.svg());
+                const hfds = fNumbers.map(n => hfd(f, n) / 1000);
+                const ys = hfds.map(h => y1 + (y2 - y1) * (1 - h / hfds[0]));
+                ys.forEach((y, i) => {
+                    const h = hfds[i];
+                    const n = fNumbers[i];
+                    const tick = new SvgLine(x, y, x + ticklen, y, style);
+                    svg.appendChild(tick.svg());
+                    const fNumLabel = new SvgText(String(n), x - 2, y, ["annot", "vcenter", "ralign", "light"]);
+                    svg.appendChild(fNumLabel.svg());
+                    const hfdLabel = new SvgText(h.toFixed(2), x + ticklen + 2, y, ["annot", "vcenter"]);
+                    svg.appendChild(hfdLabel.svg());
+                });
+                x += xSpacing;
+            }
+            svg.setAttribute("width", width);
+            svg.setAttribute("height", height);
+        }
+
+        function init(focalLengths = []) {
+            if (focalLengths.length == 0) {
+                focalLengths = [14, 16, 20, 24, 35, 50, 70, 85, 105, 135, 200];
+            }
+            initAngleOfView(focalLengths);
+            initHyperfocal(focalLengths);
         }
 
         initEventListeners();

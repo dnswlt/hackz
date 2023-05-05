@@ -111,7 +111,7 @@ def main():
     # Each tick represents 1m, assuming that the subject (i.e. the line) is 10m away.
     a = arcs[0]
     meter = abs(a.y1) / 10  # or a.y0, which should be equal.
-    assert(meter> 0)
+    assert(meter > 0)
     tx = 0
     n = 0
     while tx < a.x1 - meter/2:
@@ -153,7 +153,6 @@ def main():
         hfd_elems.append(f'<text class="annot center" x="{x}" y="{y1+16}">{f}</text>')
         # One tick per f-number.
         hfds = [hfd(f, n)/1000 for n in f_numbers]
-        print(f, hfds)
         ys = [y0 + (y1-y0) * (1-h/hfds[0]) for h in hfds]
         for f, h, y in zip(f_numbers, hfds, ys):
             hfd_elems.append(f'<path d="M {x} {y} L {x+tick_length} {y}" stroke="black" fill="none"/>')
