@@ -21,6 +21,9 @@
         .vcenter {
             dominant-baseline: middle;
         }
+        .vtop {
+            dominant-baseline: hanging;
+        }
 
         .ralign {
             text-anchor: end;
@@ -39,11 +42,13 @@
             font-weight: normal;
             color: #b0b0b0;
         }
+
         .annottbl td {
             padding-right: 1ex;
         }
 
         @media print {
+
             .no-print,
             .no-print * {
                 display: none !important;
@@ -243,17 +248,20 @@
             });
             // Delegate <Enter> in input field to click on associated button.
             document.getElementById("inpFocallengths").addEventListener("keyup", event => {
-                if(event.key !== "Enter") return;
+                if (event.key !== "Enter") return;
                 document.getElementById("cmdFocallengths").click();
                 event.preventDefault();
             });
         }
 
-        // Delete all <td> child elements from tr. (Keep initial th, if present).
-        function clearAllTd(tr) {
-            console.log(tr.lastChild);
-            while (tr.lastChild && tr.lastChild.nodeName.toLowerCase() != "th") {
-                tr.removeChild(tr.lastChild);
+        function resetTable(tbl) {
+            for (const tr of tbl.rows) {
+                // Delete all <td> child elements from tr, but keep <th>.
+                for (let i = tr.cells.length - 1; i >= 0; --i) {
+                    if (tr.cells[i].nodeName == "TD") {
+                        tr.deleteCell(i);
+                    }
+                }
             }
         }
 
@@ -268,9 +276,9 @@
             const trFocal = document.getElementById("trFOVFocalLength");
             const trHoriz = document.getElementById("trFOVHorizontal");
             const trAngular = document.getElementById("trFOVAngular");
-            clearAllTd(trFocal);
-            clearAllTd(trHoriz);
-            clearAllTd(trAngular);
+            resetTable(document.getElementById("tblFieldOfView"));
+            let firstSegment = null;
+            const hfovs = [];
             for (const f of focalLengths) {
                 let phi = aov(f);
                 const seg = svgPie(0, 0, r, up - phi / 2, up + phi / 2, { fill: gray(i / (focalLengths.length - 1)) });
@@ -278,6 +286,7 @@
                 const lbl = new SvgText(String(f), seg.x1, seg.y1, classes = ["annot"]);
                 svg.appendChild(lbl.svg());
                 if (i == 0) {
+                    firstSegment = seg;
                     // Add arc with ticks for good measure.
                     const arc = svgArc(0, 0, r, up - phi / 2, up + phi / 2, { stroke: "black" })
                     topElems.push(arc);
@@ -320,17 +329,45 @@
                 if (i < focalLengths.length) {
                     r *= 1.05;
                 }
-                // Add to FoV table.
+
+                // Add to FoV <table>.
                 trFocal.insertCell().textContent = f;
                 const hfov = 2 * Math.tan(phi / 2) * 10;
+                hfovs.push(hfov);
                 trHoriz.insertCell().textContent = hfov.toFixed(2);
                 trAngular.insertCell().textContent = (phi * 180 / Math.PI).toFixed(1);
             }
+            // Draw elements that should be on top.
             topElems.forEach(e => svg.appendChild(e.svg()));
 
+            // Draw line showing relative fields of view.
+            const yLine = 20;
+            const lineStyle = { stroke: "black" };
+            const hfovLine = new SvgLine(firstSegment.x0, yLine, firstSegment.x1, yLine, lineStyle);
+            svg.appendChild(hfovLine.svg());
+            let nGt100 = 0;
+            const ticklen = 5;
+            let tickdir = -1;
+            for (const [i, h] of hfovs.entries()) {
+                const x = firstSegment.x0 + h / hfovs[0] * (hfovLine.x2 - hfovLine.x1);
+                const f = focalLengths[i];
+                if (f > 100) {
+                    nGt100++;
+                    tickdir = (nGt100 % 2 == 0) ? -1 : 1;
+                }
+                const tick = new SvgLine(x, yLine, x, yLine + (tickdir * ticklen), lineStyle);
+                svg.appendChild(tick.svg());
+                let classes = ["annot"];
+                if (tickdir == 1) {
+                    classes.push("vtop");
+                }
+                const tickLabel = new SvgText(String(focalLengths[i]), x, yLine + (tickdir * (ticklen + 3)), classes);
+                svg.appendChild(tickLabel.svg());
+            }
+
             svg.setAttribute("width", 2 * r0);
-            svg.setAttribute("height", r + 20);  // Some extra breathing room for the final focal length label.
-            svg.setAttribute("viewBox", `${-r0} ${-r} ${2 * r0} ${r}`);
+            svg.setAttribute("height", r + 70);  // Extra space for the upper and bottom focal length labels.
+            svg.setAttribute("viewBox", `${-r0} ${-r - 15} ${2 * r0} ${r + 70}`);
         }
 
         function initHyperfocal(focalLengths) {
