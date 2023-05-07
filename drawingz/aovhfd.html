@@ -30,6 +30,19 @@
             fill: #b0b0b0;
         }
 
+        .annottbl {
+            font-size: 10pt;
+        }
+
+        .annottbl th {
+            text-align: right;
+            font-weight: normal;
+            color: #b0b0b0;
+        }
+        .annottbl td {
+            padding-right: 1ex;
+        }
+
         @media print {
             .no-print,
             .no-print * {
@@ -50,7 +63,28 @@
     <div id="aov">
         <svg id="svgAngleOfView" xmlns="http://www.w3.org/2000/svg"></svg>
     </div>
-
+    <div>
+        <table class="annottbl" id="tblFieldOfView">
+            <tr id="trFOVFocalLength">
+                <th>
+                    Focal length
+                </th>
+                <!-- td elements are added in JS. -->
+            </tr>
+            <tr id="trFOVHorizontal">
+                <th>
+                    Hor. FoV (10m)
+                </th>
+                <!-- td elements are added in JS. -->
+            </tr>
+            <tr id="trFOVAngular">
+                <th>
+                    AoV (&deg;)
+                </th>
+                <!-- td elements are added in JS. -->
+            </tr>
+        </table>
+    </div>
     <h1>Hyperfocal distance</h1>
     <p>Hyperfocal distance in meters for typical f-numbers and a 35mm full frame sensor.</p>
     <div id="hfd">
@@ -207,6 +241,20 @@
                     init(nums);
                 }
             });
+            // Delegate <Enter> in input field to click on associated button.
+            document.getElementById("inpFocallengths").addEventListener("keyup", event => {
+                if(event.key !== "Enter") return;
+                document.getElementById("cmdFocallengths").click();
+                event.preventDefault();
+            });
+        }
+
+        // Delete all <td> child elements from tr. (Keep initial th, if present).
+        function clearAllTd(tr) {
+            console.log(tr.lastChild);
+            while (tr.lastChild && tr.lastChild.nodeName.toLowerCase() != "th") {
+                tr.removeChild(tr.lastChild);
+            }
         }
 
         function initAngleOfView(focalLengths) {
@@ -217,6 +265,12 @@
             svg.replaceChildren();
             const up = Math.PI * 3 / 2;
             let topElems = [];  // Elements that should be added last to appear on top.
+            const trFocal = document.getElementById("trFOVFocalLength");
+            const trHoriz = document.getElementById("trFOVHorizontal");
+            const trAngular = document.getElementById("trFOVAngular");
+            clearAllTd(trFocal);
+            clearAllTd(trHoriz);
+            clearAllTd(trAngular);
             for (const f of focalLengths) {
                 let phi = aov(f);
                 const seg = svgPie(0, 0, r, up - phi / 2, up + phi / 2, { fill: gray(i / (focalLengths.length - 1)) });
@@ -262,41 +316,26 @@
                         n++;
                     }
                 }
-                r *= 1.05;
                 i++;
+                if (i < focalLengths.length) {
+                    r *= 1.05;
+                }
+                // Add to FoV table.
+                trFocal.insertCell().textContent = f;
+                const hfov = 2 * Math.tan(phi / 2) * 10;
+                trHoriz.insertCell().textContent = hfov.toFixed(2);
+                trAngular.insertCell().textContent = (phi * 180 / Math.PI).toFixed(1);
             }
             topElems.forEach(e => svg.appendChild(e.svg()));
 
             svg.setAttribute("width", 2 * r0);
-            svg.setAttribute("height", r);
+            svg.setAttribute("height", r + 20);  // Some extra breathing room for the final focal length label.
             svg.setAttribute("viewBox", `${-r0} ${-r} ${2 * r0} ${r}`);
         }
 
         function initHyperfocal(focalLengths) {
             const svg = document.getElementById("svgHyperfocal");
             svg.replaceChildren();
-            /*
-            x_spacing = 100
-    x_off = 30
-    hfd_width = 2*x_off + (len(focal_lengths)-1) * x_spacing + 40  # for trailing label text
-    hfd_height = 400
-    hfd_elems = []
-    f_numbers = [1.8, 2.8, 4, 5.6, 8, 11, 16]
-    y0, y1 = 10, hfd_height * 0.9
-    x = x_off
-    tick_length = 5
-    for f in focal_lengths:
-        hfd_elems.append(f'<path d="M {x} {y0} L {x} {y1}" stroke="black" fill="none"/>')
-        hfd_elems.append(f'<text class="annot center" x="{x}" y="{y1+16}">{f}</text>')
-        # One tick per f-number.
-        hfds = [hfd(f, n)/1000 for n in f_numbers]
-        print(f, hfds)
-        ys = [y0 + (y1-y0) * (1-h/hfds[0]) for h in hfds]
-        for f, h, y in zip(f_numbers, hfds, ys):
-            hfd_elems.append(f'<path d="M {x} {y} L {x+tick_length} {y}" stroke="black" fill="none"/>')
-            hfd_elems.append(f'<text class="annot vcenter" x="{x+tick_length+2}" y="{y}">{h:.2f}</text>')
-            hfd_elems.append(f'<text class="annot vcenter ralign light" x="{x-2}" y="{y}">{f:.1f}</text>')
-        x += x_spacing*/
             const xSpacing = 90;
             const xOff = 30;
             const width = 2 * xOff + (focalLengths.length - 1) * xSpacing + 40  // 40 for trailing label text.
@@ -333,6 +372,7 @@
         function init(focalLengths = []) {
             if (focalLengths.length == 0) {
                 focalLengths = [14, 16, 20, 24, 35, 50, 70, 85, 105, 135, 200];
+                document.getElementById("inpFocallengths").value = focalLengths.join(" ");
             }
             initAngleOfView(focalLengths);
             initHyperfocal(focalLengths);
