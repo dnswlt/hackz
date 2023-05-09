@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>HTML / CSS / JavaScript</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <!-- Hier kommt CSS: -->
+    <style>
+        html {
+            /* Serifenlose Schrift im ganzen Dokument. */
+            font-family: sans-serif;
+        }
+
+        /* Überschriften in Abstufungen von Blau: */
+        h1 {
+            color: #0643A5;
+        }
+
+        h2 {
+            color: #126AD2;
+        }
+
+        h3 {
+            color: #1E90FF;
+        }
+
+        /* Alle Elemente mit class="bgblue" haben einen blauen
+        Hintergrund und eine Mindesthöhe. */
+        .bgblue {
+            background-color: #ADD8E6;
+            min-height: 200px;
+        }
+
+        /* Layout für Buttons, die Schrifteigenschaften ändern. */
+        .toggleButton {
+            min-width: 5em;
+            border: 1px solid black;
+            background-color: #e0e0e0;
+            font-size: 10pt;
+        }
+
+        /* Die Schrift in Buttons für fett/kursiv/unterstrichen
+        soll ebenfalls fett/kursiv/unterstrichen sein: */
+        #toggleBold {
+            font-weight: bold;
+        }
+
+        #toggleItalic {
+            font-style: italic;
+        }
+
+        #toggleUnderline {
+            text-decoration: underline;
+        }
+
+        /* Das <div>, dessen Schrifteigenschaften wir ändern wollen. */
+        #jsedit {
+            /* Text in diesem <div> soll etwas Abstand zum Rand haben. */
+            padding: 10px;
+            /* Elemente um das <div> herum sollen ebenfalls etwas Abstand haben. */
+            margin-top: 10px;
+            margin-bottom: 10px;
+            background-color: bisque;
+        }
+
+        /* Das <div> mit id="animated" wird in JavaScript verändert. */
+        #animated {
+            margin-top: 10px;
+            margin-bottom: 10px;
+            min-height: 10px;
+            width: 100%;
+            background-color: chocolate;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>HTML / CSS / JavaScript</h1>
+    <p>
+        Ein paar Beispiele, was man mit CSS und JavaScript so machen kann.
+    </p>
+
+    <h2>Farben mit CSS</h2>
+    <div class="bgblue">
+        Hier mal ein &lt;div&gt; mit Hintergrundfarbe und Mindesthöhe.
+    </div>
+
+    <h2>Spass mit JavaScript</h2>
+    <div>
+        Das CSS des folgenden Texts kann mit JavaScript geändert werden:
+        <div id="jsedit">
+            The brown fox jumps over the lazy dog.
+        </div>
+        <div>
+            <button class="toggleButton" id="toggleBold">Fett</button>
+            <button class="toggleButton" id="toggleItalic">Kursiv</button>
+            <button class="toggleButton" id="toggleUnderline">Unterstrichen</button>
+        </div>
+    </div>
+    <div id="animated"></div>
+    <div>
+        <button class="toggleButton" id="toggleAnimation">Start/Stop</button>
+    </div>
+    <script>
+        // Hier beginnt JavaScript.
+
+        // Funktion, um den <button>s Funktionen hinzuzufügen, die ausgeführt werden, wenn 
+        // sie geklickt werden.
+        function initEventListeners() {
+            // Zuerst der "Fett" Button:
+            // Wir holen uns den Button in JavaScript über getElementById:
+            const bold = document.getElementById("toggleBold");
+            // Und fügen dann einen EventListener hinzu. Das ist eine Funktion,
+            // die ausgeführt wird, wenn der Button geklickt wird:
+            bold.addEventListener('click', clickedBoldButton);
+            // Dasselbe für Kursiv.
+            const italic = document.getElementById("toggleItalic");
+            italic.addEventListener('click', clickedItalicButton);
+
+            // Dasselbe für Unterstrichen. Man kann Funktionen in JavaScript
+            // auch "inline" definieren, d.h. direkt da, wo man sie braucht.
+            // Hier: e => { ...} 
+            const underl = document.getElementById("toggleUnderline");
+            underl.addEventListener('click', e => {
+                const txt = document.getElementById("jsedit");
+                const d = txt.style.textDecoration;
+                if (d == "underline") {
+                    // Ist bereits unterstrichen, stelle auf normal.
+                    txt.style.textDecoration = "none";
+                } else {
+                    // Mache unterstrichen.
+                    txt.style.textDecoration = "underline";
+                }
+            });
+        }
+
+        // Wird ausgeführt, wenn auf "Fett" geklickt wird.
+        function clickedBoldButton(event) {
+            // Hole das <span> element mit id="jsedit", dessen
+            // CSS (.style Attribut) wir anpassen wollen. 
+            const txt = document.getElementById("jsedit");
+            const w = txt.style.fontWeight;
+            if (w == "bold") {
+                // Ist bereits fett, stelle auf normal.
+                txt.style.fontWeight = "normal";
+            } else {
+                // Mache fett. Das hat denselben Effekt als würden wir im CSS
+                // direkt
+                // font-weight: bold;
+                // setzen.
+                txt.style.fontWeight = "bold";
+            }
+        }
+
+        // Wird ausgeführt, wenn auf "Kursiv" geklickt wird.
+        function clickedItalicButton(event) {
+            const txt = document.getElementById("jsedit");
+            const s = txt.style.fontStyle;
+            if (s == "italic") {
+                // Ist bereits kursiv, stelle auf normal.
+                txt.style.fontStyle = "normal";
+            } else {
+                // Mache kursiv.
+                txt.style.fontStyle = "italic";
+            }
+        }
+
+        // Rufe die Initialisierung beim Laden der HTML-Seite auf.
+        initEventListeners();
+
+        // BEGIN ANIMATION.
+        // Fortgeschrittener Kram: Animationen.
+
+        // Timestamp, an dem die Animation gestarted wurde.
+        let animationStarted = null;
+        let animationEnabled = true;
+        // Animiere das <div> mit id="animated": mache es breiter und wieder schmaler.
+        function animateDiv(timestamp) {
+            if (!animationEnabled) {
+                return;  // Nichts tun, wenn die Animation nicht enabled ist.
+            }
+            const div = document.getElementById("animated");
+            if (animationStarted == null) {
+                // Erster Durchlauf. Wir merken uns die Startzeit.
+                animationStarted = timestamp;
+            }
+            // Wir nutzen Sinus, um eine periodische Funktion zu haben, die 
+            // zwischen 0 (div gar nicht anzeigen) und 1 (div auf ganzer Breite anzeigen)
+            // variiert.
+            const scaleFactor = (Math.sin((timestamp - animationStarted)/2000*Math.PI*2) + 1) / 2;
+            div.style.width = (100*scaleFactor).toFixed(1) + "%";
+            // Nächsten Animationsschritt anfordern.
+            window.requestAnimationFrame(animateDiv);
+        }
+        // Lass den Browser wiederholt die Funktion animateDiv aufrufen, um das <div> zu animieren.
+        // Siehe https://developer.mozilla.org/en-US/docs/Web/API/window/requestAnimationFrame
+        window.requestAnimationFrame(animateDiv);
+        // END ANIMATION.
+        document.getElementById("toggleAnimation").addEventListener('click', e => {
+            animationEnabled = !animationEnabled;
+            if (animationEnabled) {
+                window.requestAnimationFrame(animateDiv);
+            }
+        });
+
+    </script>
+</body>
+
+</html>
