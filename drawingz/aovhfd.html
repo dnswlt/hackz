@@ -48,6 +48,10 @@
             padding-right: 1ex;
         }
 
+        .angle-input {
+            width: 3em;
+        }
+
         @media print {
 
             .no-print,
@@ -59,11 +63,15 @@
 </head>
 
 <body>
-    <h1>Horizontal angle and field of view</h1>
+    <h1>Angle and field of view</h1>
     <div class="no-print">
         Specify focal lengths (e.g. "30 50 120"):
-        <input type="text" id="inpFocallengths">
+        <input type="text" id="inpFocallengths" value="14 16 20 24 35 50 70 85 105 135 200">
         <button id="cmdFocallengths">Redraw</button>
+        <input type="radio" name="sensorsize" id="radLongSide" checked>
+        <label for="radLongSide">36mm (H)</label>
+        <input type="radio" name="sensorsize" id="radShortSide">
+        <label for="radShortSide">24mm (V)</label>
     </div>
     <p>Ticks are at 5&deg; for angle of view and at 1m for field of view (for an object plane distance of 10m).</p>
     <div id="aov">
@@ -98,22 +106,33 @@
     </div>
 
     <h1>Panoramas</h1>
-    <p>How many individual photos do you need to take at focal length <em>f</em> to reliably stitch
-        together a panorama of dimensions <em>W x H</em> at a subject distance of 100m?</p>
-    <div id="hfd">
-        <svg id="svgHyperfocal" xmlns="http://www.w3.org/2000/svg"></svg>
+    <p>Photos you need to take at a given focal length to reliably stitch
+        together a panorama of the given angular dimensions (AoV).</p>
+    <div id="pano">
+        <div class="no-print">
+            Horiz. AoV:
+            <input type="text" class="angle-input" id="inpPanoHorizAov" value="90">
+            Vert. AoV:
+            <input type="text" class="angle-input" id="inpPanoVertAov" value="45">
+            Focal length:
+            <input type="text" class="angle-input" id="inpPanoFocal" value="50">
+            <button id="cmdPano">Redraw</button>
+        </div>
+        <svg id="svgPanorama" xmlns="http://www.w3.org/2000/svg"></svg>
     </div>
 
     <script>
 
+        // Can be changed to 24 by clicking on the checkbox.
+        let sensorWidth = 36;
         // Returns the angle of view for the given focal length.
-        function aov(focal_length, sensor_width = 36) {
-            return 2 * Math.atan(sensor_width / (2 * focal_length));
+        function aov(focalLength, sensorWidth) {
+            return 2 * Math.atan(sensorWidth / (2 * focalLength));
         }
 
         // Returns the hyperfocal distance.
-        function hfd(focal_length, f_number, coc = 0.03) {
-            return (focal_length * focal_length) / (f_number * coc) + focal_length;
+        function hfd(focalLength, fNumber, coc = 0.03) {
+            return (focalLength * focalLength) / (fNumber * coc) + focalLength;
         }
 
         function svgPath(p) {
@@ -239,20 +258,22 @@
             return deg / 180 * Math.PI;
         }
 
+        function getFocalLengths() {
+            const inp = document.getElementById("inpFocallengths");
+            const re = new RegExp("[ ,;]+");
+            const s = inp.value.trim();
+            nums = s.split(re).map(n => Number(n)).filter(n => n > 0);
+            if (nums.length == 0) {
+                return [14, 16, 20, 24, 35, 50, 70, 85, 105, 135, 200];
+            }
+            nums.sort(function (a, b) { return a - b });
+            return nums;
+        }
+
         function initEventListeners() {
             const cmd = document.getElementById("cmdFocallengths");
             cmd.addEventListener('click', e => {
-                const inp = document.getElementById("inpFocallengths");
-                const re = new RegExp("[ ,;]+");
-                const s = inp.value.trim();
-                if (!s) {
-                    return;
-                }
-                nums = s.split(re).map(n => Number(n)).filter(n => n > 0);
-                if (nums.length > 0) {
-                    nums.sort(function (a, b) { return a - b });
-                    init(nums);
-                }
+                init(getFocalLengths());
             });
             // Delegate <Enter> in input field to click on associated button.
             document.getElementById("inpFocallengths").addEventListener("keyup", event => {
@@ -260,6 +281,24 @@
                 document.getElementById("cmdFocallengths").click();
                 event.preventDefault();
             });
+            const radShort = document.getElementById("radShortSide");
+            radShort.addEventListener('change', e => {
+                if (e.target.checked) {
+                    sensorWidth = 24;
+                    init(getFocalLengths());
+                }
+            })
+            const radLong = document.getElementById("radLongSide");
+            radLong.addEventListener('change', e => {
+                if (e.target.checked) {
+                    sensorWidth = 36;
+                    init(getFocalLengths());
+                }
+            })
+            const cmdPano = document.getElementById("cmdPano");
+            cmdPano.addEventListener('click', e => {
+                initPanorama(getPanoramaInputs());
+            })
         }
 
         function resetTable(tbl) {
@@ -288,7 +327,7 @@
             let firstSegment = null;
             const hfovs = [];
             for (const f of focalLengths) {
-                let phi = aov(f);
+                let phi = aov(f, sensorWidth);
                 const seg = svgPie(0, 0, r, up - phi / 2, up + phi / 2, { fill: gray(i / (focalLengths.length - 1)) });
                 svg.appendChild(seg.svg());
                 const lbl = new SvgText(String(f), seg.x1, seg.y1, classes = ["annot"]);
@@ -414,17 +453,92 @@
             svg.setAttribute("height", height);
         }
 
-        function init(focalLengths = []) {
-            if (focalLengths.length == 0) {
-                focalLengths = [14, 16, 20, 24, 35, 50, 70, 85, 105, 135, 200];
-                document.getElementById("inpFocallengths").value = focalLengths.join(" ");
+        function getPanoramaInputs() {
+            const hAngle = document.getElementById("inpPanoHorizAov");
+            const vAngle = document.getElementById("inpPanoVertAov");
+            const focalLen = document.getElementById("inpPanoFocal");
+            const h = Number(hAngle.value.trim());
+            const v = Number(vAngle.value.trim());
+            const f = Number(focalLen.value.trim());
+            const rad = x => (x > 0 && x < 180) ? x / 180 * Math.PI : 90 / 180 * Math.PI;
+            return {
+                h: rad(h),
+                v: rad(v),
+                f: (f > 0 && f <= 800) ? f : 50,
+            };
+        }
+
+        function initPanorama(inputs) {
+            const hPhi = inputs.h;
+            const vPhi = inputs.v;
+            const mode = "vertical";  // TODO: Make this a param.
+            const sensorSizes = (mode == "horizontal")
+                ? [36, 24] : [24, 36]
+            let hGamma = aov(inputs.f, sensorSizes[0]);
+            let vGamma = aov(inputs.f, sensorSizes[1]);
+            const svg = document.getElementById("svgPanorama");
+            svg.replaceChildren();
+            const up = 3 / 2 * Math.PI;
+            const r = 200;
+            const pieStyle = { fill: "none", stroke: "black", strokeWidth: "2px" };
+            const hPie = svgPie(0, 0, r, up - hPhi / 2, up + hPhi / 2, pieStyle);
+            svg.appendChild(hPie.svg());
+            const right = 0;
+            const vPie = svgPie(-r / 2, r, r, right - vPhi / 2, right + vPhi / 2, pieStyle);
+            svg.appendChild(vPie.svg());
+
+            // How many photos do we need horizontally to fill the whole hPhi range, where
+            // * all photos overlap by a fraction of `overlap`.
+            // * photos overshoot either side by at least `overshoot`.
+            const overlap = 1 / 3;
+            const overshoot = 1 / 4;
+            const nHoriz = (hGamma >= hPhi + 2 * (overshoot * hGamma))
+                ? 1
+                : Math.ceil((hPhi + 2 * overshoot * hGamma - overlap * hGamma) / ((1 - overlap) * hGamma));
+            const hStep = (1 - overlap) * hGamma;
+            let hStart = (nHoriz % 2 == 0)
+                ? up - nHoriz / 2 * hStep - overlap / 2 * hGamma
+                : up - (nHoriz - 1) / 2 * hStep - hGamma / 2;
+            for (let i = 0; i < nHoriz; i++) {
+                let style = { fill: "rgb(100,200,255,0.5)" };
+                if (i >= 0) {
+                    style.stroke = "#7f7f7f";
+                }
+                const hPie = svgPie(0, 0, r + (i % 2 == 0 ? 2 : 1) * 10, hStart, hStart + hGamma, style);
+                hStart += hStep;
+                svg.appendChild(hPie.svg());
             }
+            // Vertical angles.
+            const nVert = (vGamma >= vPhi)
+                ? 1
+                : Math.ceil((vPhi + 2 * overshoot * vGamma - overlap * vGamma) / ((1 - overlap) * vGamma));
+            const vStep = (1 - overlap) * vGamma;
+            let vStart = (nVert % 2 == 0)
+                ? right - nVert / 2 * vStep - overlap / 2 * vGamma
+                : right - (nVert - 1) / 2 * vStep - vGamma / 2;
+            for (let i = 0; i < nVert; i++) {
+                let style = { fill: "rgb(100,200,255,0.5)" };
+                if (i >= 0) {
+                    style.stroke = "#7f7f7f";
+                }
+                const vPie = svgPie(-r / 2, r, r + (i % 2 == 0 ? 2 : 1) * 10, vStart, vStart + vGamma, style);
+                vStart += vStep;
+                svg.appendChild(vPie.svg());
+            }
+            const r1 = r + 20;
+            svg.setAttribute("width", 2 * r1);
+            svg.setAttribute("height", 3 * r1 + 20);
+            svg.setAttribute("viewBox", `${-r1} ${-r1 - 20} ${2 * r1} ${3 * r1 + 20}`);
+        }
+
+        function init(focalLengths = []) {
             initAngleOfView(focalLengths);
             initHyperfocal(focalLengths);
+            initPanorama(getPanoramaInputs())
         }
 
         initEventListeners();
-        init();
+        init(getFocalLengths());
     </script>
 </body>
 
