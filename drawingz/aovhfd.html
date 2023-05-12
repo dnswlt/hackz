@@ -48,7 +48,7 @@
             padding-right: 1ex;
         }
 
-        .angle-input {
+        .pano-input {
             width: 3em;
         }
 
@@ -63,7 +63,9 @@
 </head>
 
 <body>
+    
     <h1>Angle and field of view</h1>
+
     <div class="no-print">
         Specify focal lengths (e.g. "30 50 120"):
         <input type="text" id="inpFocallengths" value="14 16 20 24 35 50 70 85 105 135 200">
@@ -99,23 +101,37 @@
             </tr>
         </table>
     </div>
+
     <h1>Hyperfocal distance</h1>
+    
     <p>Hyperfocal distance in meters for typical f-numbers and a 35mm full frame sensor.</p>
     <div id="hfd">
         <svg id="svgHyperfocal" xmlns="http://www.w3.org/2000/svg"></svg>
     </div>
 
     <h1>Panoramas</h1>
-    <p>Photos you need to take at a given focal length to reliably stitch
-        together a panorama of the given angular dimensions (AoV).</p>
+
+    You need to take <b><span id="numPhotosHoriz">?</span> x <span id="numPhotosVert">?</span></b> photos (H x V) at the
+    given focal length to reliably stitch together a panorama of the given angular dimensions (AoV).</p>
     <div id="pano">
         <div class="no-print">
-            Horiz. AoV:
-            <input type="text" class="angle-input" id="inpPanoHorizAov" value="90">
-            Vert. AoV:
-            <input type="text" class="angle-input" id="inpPanoVertAov" value="45">
-            Focal length:
-            <input type="text" class="angle-input" id="inpPanoFocal" value="50">
+            <label for="inpPanoHorizAov">H AoV (&deg;):</label>
+            <input type="text" class="pano-input" id="inpPanoHorizAov" value="90">
+            <label for="inpPanoVertAov">V AoV (&deg;):</label>
+            <input type="text" class="pano-input" id="inpPanoVertAov" value="37.8">
+            <label for="inpPanoFocal">Focal length:</label>
+            <input type="text" class="pano-input" id="inpPanoFocal" value="50">
+            Camera orientation:
+            <label for="radPanoOrientH">H</label>
+            <input type="radio" name="panoOrient" id="radPanoOrientH">
+            <label for="radPanoOrientV">V</label>
+            <input type="radio" name="panoOrient" id="radPanoOrientV" checked>
+            <label for="inpPanoOverlap">Overlap (%)</label>
+            <input type="text" class="pano-input" id="inpPanoOverlap" value="33">
+            <label for="inpPanoMargin">Margin (%)</label>
+            <input type="text" class="pano-input" id="inpPanoMargin" value="50">
+        </div>
+        <div>
             <button id="cmdPano">Redraw</button>
         </div>
         <svg id="svgPanorama" xmlns="http://www.w3.org/2000/svg"></svg>
@@ -299,6 +315,19 @@
             cmdPano.addEventListener('click', e => {
                 initPanorama(getPanoramaInputs());
             })
+            for (const id of ["radPanoOrientH", "radPanoOrientV"]) {
+                document.getElementById(id).addEventListener("change", e => {
+                    initPanorama(getPanoramaInputs());
+                });
+            }
+            for (const id of ["inpPanoHorizAov", "inpPanoVertAov", "inpPanoFocal", "inpPanoOverlap", "inpPanoMargin"]) {
+                document.getElementById(id).addEventListener("keyup", event => {
+                    if (event.key !== "Enter") return;
+                    document.getElementById("cmdPano").click();
+                    event.preventDefault();
+                });
+            }
+
         }
 
         function resetTable(tbl) {
@@ -457,22 +486,30 @@
             const hAngle = document.getElementById("inpPanoHorizAov");
             const vAngle = document.getElementById("inpPanoVertAov");
             const focalLen = document.getElementById("inpPanoFocal");
+            const overlap = document.getElementById("inpPanoOverlap");
+            const margin = document.getElementById("inpPanoMargin");
+            const orientH = document.getElementById("radPanoOrientH");
+
             const h = Number(hAngle.value.trim());
             const v = Number(vAngle.value.trim());
             const f = Number(focalLen.value.trim());
+            const o = Number(overlap.value.trim());
+            const m = Number(margin.value.trim());
             const rad = x => (x > 0 && x < 180) ? x / 180 * Math.PI : 90 / 180 * Math.PI;
             return {
                 h: rad(h),
                 v: rad(v),
                 f: (f > 0 && f <= 800) ? f : 50,
+                overlap: (o >= 0 && o < 100) ? o / 100 : 1/3,
+                margin: (m >= 0 && m <= 150) ? m / 100 : 1/2,
+                orient: orientH.checked ? "horizontal" : "vertical",
             };
         }
 
         function initPanorama(inputs) {
             const hPhi = inputs.h;
             const vPhi = inputs.v;
-            const mode = "vertical";  // TODO: Make this a param.
-            const sensorSizes = (mode == "horizontal")
+            const sensorSizes = (inputs.orient == "horizontal")
                 ? [36, 24] : [24, 36]
             let hGamma = aov(inputs.f, sensorSizes[0]);
             let vGamma = aov(inputs.f, sensorSizes[1]);
@@ -490,11 +527,12 @@
             // How many photos do we need horizontally to fill the whole hPhi range, where
             // * all photos overlap by a fraction of `overlap`.
             // * photos overshoot either side by at least `overshoot`.
-            const overlap = 1 / 3;
-            const overshoot = 1 / 4;
-            const nHoriz = (hGamma >= hPhi + 2 * (overshoot * hGamma))
+            const overlap = inputs.overlap;
+            const margin = inputs.margin;
+            const nHoriz = (hGamma >= hPhi + 2 * (margin * hGamma))
                 ? 1
-                : Math.ceil((hPhi + 2 * overshoot * hGamma - overlap * hGamma) / ((1 - overlap) * hGamma));
+                : Math.ceil((hPhi + 2 * margin * hGamma - overlap * hGamma) / ((1 - overlap) * hGamma));
+            document.getElementById("numPhotosHoriz").textContent = nHoriz;
             const hStep = (1 - overlap) * hGamma;
             let hStart = (nHoriz % 2 == 0)
                 ? up - nHoriz / 2 * hStep - overlap / 2 * hGamma
@@ -511,7 +549,8 @@
             // Vertical angles.
             const nVert = (vGamma >= vPhi)
                 ? 1
-                : Math.ceil((vPhi + 2 * overshoot * vGamma - overlap * vGamma) / ((1 - overlap) * vGamma));
+                : Math.ceil((vPhi + 2 * margin * vGamma - overlap * vGamma) / ((1 - overlap) * vGamma));
+            document.getElementById("numPhotosVert").textContent = nVert;
             const vStep = (1 - overlap) * vGamma;
             let vStart = (nVert % 2 == 0)
                 ? right - nVert / 2 * vStep - overlap / 2 * vGamma
