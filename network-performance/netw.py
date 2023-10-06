@@ -34,7 +34,6 @@ import time
 
 # Timeout to use for server and client sockets.
 TIMEOUT_SECONDS = 5.0
-IPV4_MULTICAST_ADDRESS = ('224.0.0.199', 10199)
 
 def parse_args():
     p = argparse.ArgumentParser(description="Network speed measurement utility.")
@@ -78,6 +77,14 @@ def fmt_bytes(n_bytes):
     if n_bytes <= 2**20:
         return f"{n_bytes/2**10:.3f} kiB"
     return f"{n_bytes/2**20:.3f} MiB"
+
+
+def addr_tuple(addr):
+    """Accepts a "host:port" string and returns a (host, int(port)) tuple."""
+    if isinstance(addr, tuple):
+        return addr
+    host, port = addr.rsplit(":", 1)
+    return host, int(port)
 
 
 def fmt_thrpt(bps):
@@ -281,6 +288,7 @@ def discover_servers(multicast_addr):
     [b"HELO"][str hostname][int32 port]
     """
     print("Discovering servers...")
+    multicast_addr = addr_tuple(multicast_addr)
     num_found = 0
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
         sock.settimeout(TIMEOUT_SECONDS)
@@ -312,11 +320,8 @@ def discover_servers(multicast_addr):
         
 def run_server(host, port, multicast_addr, discoverable=True):
     if discoverable:
-        if isinstance(multicast_addr, str):
-            ma = multicast_addr.split(":")
-            multicast_addr = (ma[0], int(ma[1]))
         multicast_thread = threading.Thread(target=listen_multicast, 
-            args=(multicast_addr, (host, port)), daemon=True)
+            args=(addr_tuple(multicast_addr), (host, port)), daemon=True)
         multicast_thread.start()
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.bind((host, port))
