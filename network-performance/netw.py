@@ -40,6 +40,7 @@ def parse_args():
     p = argparse.ArgumentParser(description="Network speed measurement utility.")
     p.add_argument("-s", "--host", default="", help="Hostname or IP to connect to (in client mode) or to listen on (in server mode).")
     p.add_argument("-p", "--port", default=10101, type=int)
+    p.add_argument("-u", "--multicast_addr", default="224.0.0.199:10199", help="Multicast address:port for discovery.")
     p.add_argument("-m", "--mode", default="client", choices=["client", "server"], 
         help="Mode to run in. Start one side as the server and then run tests from the other side as a client.")
     p.add_argument("-c", "--command", default="throughput", choices=["throughput", "latency", "shutdown"],
@@ -246,7 +247,7 @@ def listen_multicast(multicast_addr, server_addr):
         server_addr: a (host, port) tuple for this server's address.
     """
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    # Bind to same address that we listen to for measurements.
+    # Bind to same interface that we listen to for measurements.
     server_host, server_port = server_addr
     multicast_host, multicast_port = multicast_addr
     sock.bind((server_host, multicast_port))
@@ -309,10 +310,13 @@ def discover_servers(multicast_addr):
         print("No servers found.")
 
         
-def run_server(host, port, discoverable=True):
+def run_server(host, port, multicast_addr, discoverable=True):
     if discoverable:
+        if isinstance(multicast_addr, str):
+            ma = multicast_addr.split(":")
+            multicast_addr = (ma[0], int(ma[1]))
         multicast_thread = threading.Thread(target=listen_multicast, 
-            args=(IPV4_MULTICAST_ADDRESS, (host, port)), daemon=True)
+            args=(multicast_addr, (host, port)), daemon=True)
         multicast_thread.start()
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.bind((host, port))
@@ -379,12 +383,13 @@ if __name__ == "__main__":
         args.host = "0.0.0.0" if args.mode == "server" else "localhost"
     logging.basicConfig(format="%(asctime)s %(thread)d %(levelname)s %(message)s", level=logging.DEBUG)
     if args.discover:
-        discover_servers(IPV4_MULTICAST_ADDRESS)
+        discover_servers(args.multicast_addr)
     elif args.mode == "server":
-        run_server(args.host, args.port, discoverable=not args.no_multicast)
+        run_server(args.host, args.port, args.multicast_addr, discoverable=not args.no_multicast)
     elif args.command == "throughput":
         run_throughput(args.host, args.port, parse_unit(args.num_bytes), args.chunk_size)
     elif args.command == "shutdown":
         run_shutdown(args.host, args.port)
     elif args.command == "latency":
         run_latency(args.host, args.port, parse_unit(args.num_packets), args.chunk_size)
+
