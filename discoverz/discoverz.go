@@ -59,6 +59,8 @@ type StatusMessage struct {
 	OS            string    `json:"os"`
 	RunID         string    `json:"runID"`
 	UptimeSeconds float64   `json:"uptimeSeconds"`
+	Uptime        string    `json:"uptime"`
+	PacketCount   int64     `json:"requestCount"`
 	CustomMessage string    `json:"customMessage"`
 }
 
@@ -174,13 +176,14 @@ func runServer(ifaceName string, multicastAddr string, port int, customMessage s
 	debugLog("Listening on interface %q on %v for multicast address %v \n",
 		iface.Name, conn.LocalAddr().String(), multicastAddr)
 
-	// Get data to send in the status message.
+	// Get data to send in each status message.
 	hostname := getHostname()
 	localAddr, err := getLocalIPv4Addr(iface)
 	if err != nil {
 		log.Fatalf("Failed to get local address: %v", err)
 	}
-	runID := getUID(8)
+	runID := getUID(8) // 8 bytes of randomness should suffice for local servers.
+	var packetCount int64
 
 	// Serve forever.
 	buf := make([]byte, 1024)
@@ -190,6 +193,7 @@ func runServer(ifaceName string, multicastAddr string, port int, customMessage s
 			debugLog("Error reading from UDP: %v\n", err)
 			continue
 		}
+		packetCount++
 		debugLog("Received %d bytes from %v: %s\n", n, remoteAddr, string(buf[:n]))
 		var message Message
 		if err := json.Unmarshal(buf[:n], &message); err != nil {
@@ -199,6 +203,7 @@ func runServer(ifaceName string, multicastAddr string, port int, customMessage s
 		if message.Type == MessageTypeDiscovery {
 			// Ignore content of the message.
 			// Send a "status" message response back to the sender.
+			uptime := time.Since(started)
 			response, err := newMessage(MessageTypeStatus, StatusMessage{
 				Timestamp:     time.Now(),
 				Hostname:      hostname,
@@ -206,7 +211,9 @@ func runServer(ifaceName string, multicastAddr string, port int, customMessage s
 				IPv4:          localAddr.IP.String(),
 				OS:            fmt.Sprintf("%v/%v", runtime.GOOS, runtime.GOARCH),
 				RunID:         runID,
-				UptimeSeconds: time.Since(started).Seconds(),
+				UptimeSeconds: uptime.Seconds(),
+				Uptime:        uptime.String(),
+				PacketCount:   packetCount,
 				CustomMessage: customMessage,
 			})
 			if err != nil {
