@@ -25,7 +25,7 @@ var (
 	serverModeFlag     = flag.Bool("server", false, "Run as server.")
 	multicastAddrFlag  = flag.String("multicast-addr", "239.36.36.36", "Multicast address to use.")
 	portFlag           = flag.Int("port", 12345, "Port to use for multicast.")
-	timeoutFlag        = flag.Duration("timeout", 5*time.Second, "Timeout for receiving multicast responses.")
+	timeoutFlag        = flag.Duration("timeout", 1*time.Second, "Timeout for receiving multicast responses.")
 	customMessageFlag  = flag.String("custom-message", "", "Custom message to send in the status message.")
 	listInterfacesFlag = flag.Bool("list-ifaces", false, "Print all interfaces and exit.")
 	debugFlag          = flag.Bool("debug", false, "Enable debug logging")
@@ -182,6 +182,7 @@ func runServer(ifaceName string, multicastAddr string, port int, customMessage s
 	if err != nil {
 		log.Fatalf("Failed to get local address: %v", err)
 	}
+	osArch := fmt.Sprintf("%v/%v", runtime.GOOS, runtime.GOARCH)
 	runID := getUID(8) // 8 bytes of randomness should suffice for local servers.
 	var packetCount int64
 
@@ -202,17 +203,17 @@ func runServer(ifaceName string, multicastAddr string, port int, customMessage s
 		}
 		if message.Type == MessageTypeDiscovery {
 			// Ignore content of the message.
-			// Send a "status" message response back to the sender.
+			// Send a StatusMessage response back to the sender.
 			uptime := time.Since(started)
 			response, err := newMessage(MessageTypeStatus, StatusMessage{
 				Timestamp:     time.Now(),
 				Hostname:      hostname,
 				MAC:           iface.HardwareAddr.String(),
 				IPv4:          localAddr.IP.String(),
-				OS:            fmt.Sprintf("%v/%v", runtime.GOOS, runtime.GOARCH),
+				OS:            osArch,
 				RunID:         runID,
 				UptimeSeconds: uptime.Seconds(),
-				Uptime:        uptime.String(),
+				Uptime:        uptime.Round(time.Second).String(), // Avoid ugly fractions in string repr.
 				PacketCount:   packetCount,
 				CustomMessage: customMessage,
 			})
