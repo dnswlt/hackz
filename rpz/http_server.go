@@ -32,6 +32,19 @@ func (s *HTTPServer) Serve() {
 	}
 }
 
+func (s *HTTPServer) ServeTLS(certFile, keyFile string) {
+	s.items = make(map[string]Item)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /rpz/items/{itemID}", s.handleGetItem)
+	mux.HandleFunc("POST /rpz/items", s.handlePostItem)
+
+	log.Println("Listening on :8443")
+	if err := http.ListenAndServeTLS(":8443", certFile, keyFile, mux); err != nil {
+		log.Fatalf("Server failed: %v", err)
+	}
+}
+
 func (s *HTTPServer) handleGetItem(w http.ResponseWriter, r *http.Request) {
 	itemID := r.PathValue("itemID")
 
