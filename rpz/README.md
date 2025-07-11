@@ -7,7 +7,7 @@ Silly simple RPC benchmarking.
 Start the server
 
 ```bash
-go run ./cmd/server
+go run ./cmd/server -mode http
 ```
 
 Then run a benchmark for GET:
@@ -40,12 +40,31 @@ Silly simple, right?
 
 ## Run (gRPC)
 
+Start the server:
+
+```bash
+go run ./cmd/server -mode grpc
+```
+
+Run a load test (using TLS without client verification of the server's certificate chain and host name):
+
 ```bash
 ghz \
   --proto proto/item_service.proto \
   --call rpz.ItemService.CreateItem \
   -d '{"id":"abc","name":"Name"}' \
   -c 100 -n 100000 \
-  --insecure \
+  --skipTLS \
   localhost:9090
+```
+
+## TLS
+
+The certicicates in ./cert were generated with this command:
+
+```bash
+openssl req -x509 -newkey rsa:2048 \
+  -keyout certs/dev_key.pem -out certs/dev_cert.pem \
+  -days 365 -nodes \
+  -subj "/CN=localhost"
 ```

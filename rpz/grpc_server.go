@@ -10,6 +10,7 @@ import (
 	"github.com/dnswlt/hackz/rpz/rpzpb"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -63,6 +64,26 @@ func (s *GRPCServer) Serve() {
 	rpzpb.RegisterItemServiceServer(grpcServer, s)
 
 	log.Println("gRPC server listening on :9090")
+	if err := grpcServer.Serve(lis); err != nil {
+		log.Fatalf("gRPC server failed: %v", err)
+	}
+}
+
+func (s *GRPCServer) ServeTLS(certFile, keyFile string) {
+	lis, err := net.Listen("tcp", ":9090")
+	if err != nil {
+		log.Fatalf("failed to listen: %v", err)
+	}
+
+	creds, err := credentials.NewServerTLSFromFile(certFile, keyFile)
+	if err != nil {
+		log.Fatalf("failed to load TLS credentials: %v", err)
+	}
+
+	grpcServer := grpc.NewServer(grpc.Creds(creds))
+	rpzpb.RegisterItemServiceServer(grpcServer, s)
+
+	log.Println("gRPC TLS server listening on :9090")
 	if err := grpcServer.Serve(lis); err != nil {
 		log.Fatalf("gRPC server failed: %v", err)
 	}
