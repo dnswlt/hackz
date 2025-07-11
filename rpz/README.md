@@ -2,7 +2,7 @@
 
 Silly simple RPC benchmarking.
 
-## Run
+## Run (http)
 
 Start the server
 
@@ -30,8 +30,6 @@ done
 wrk -t4 -c100 -d10s -s wrk/get_items.lua http://localhost:8080
 ```
 
-
-
 ... or for POST:
 
 ```bash
@@ -39,3 +37,15 @@ wrk -t4 -c100 -d10s -s wrk/post_items.lua http://localhost:8080
 ```
 
 Silly simple, right?
+
+## Run (gRPC)
+
+```bash
+ghz \
+  --proto proto/item_service.proto \
+  --call rpz.ItemService.CreateItem \
+  -d '{"id":"abc","name":"Name"}' \
+  -c 100 -n 100000 \
+  --insecure \
+  localhost:9090
+```

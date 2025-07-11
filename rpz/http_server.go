@@ -8,18 +8,18 @@ import (
 	"time"
 )
 
+type HTTPServer struct {
+	mu    sync.Mutex
+	items map[string]Item
+}
+
 type Item struct {
 	ID        string    `json:"id"`
 	Name      string    `json:"name"`
 	Timestamp time.Time `json:"timestamp"`
 }
 
-type Server struct {
-	mu    sync.Mutex
-	items map[string]Item
-}
-
-func (s *Server) Serve() {
+func (s *HTTPServer) Serve() {
 	s.items = make(map[string]Item)
 
 	mux := http.NewServeMux()
@@ -32,7 +32,7 @@ func (s *Server) Serve() {
 	}
 }
 
-func (s *Server) handleGetItem(w http.ResponseWriter, r *http.Request) {
+func (s *HTTPServer) handleGetItem(w http.ResponseWriter, r *http.Request) {
 	itemID := r.PathValue("itemID")
 
 	s.mu.Lock()
@@ -48,7 +48,7 @@ func (s *Server) handleGetItem(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(item)
 }
 
-func (s *Server) handlePostItem(w http.ResponseWriter, r *http.Request) {
+func (s *HTTPServer) handlePostItem(w http.ResponseWriter, r *http.Request) {
 	var item Item
 	if err := json.NewDecoder(r.Body).Decode(&item); err != nil {
 		http.Error(w, "invalid JSON", http.StatusBadRequest)
