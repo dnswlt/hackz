@@ -139,9 +139,22 @@ using `sync.Mutex`, `atomic.Int64` and a sharded atomic implementation
 that distributes updates across N atomics and aggregates them at
 query time.
 
+Results on an M1 Pro:
+
 ```bash
+$ go run ./cmd/counter/
 Using 500 goroutines, 100000 iterations, 500 shards
 Counter type *main.MutexCounter took 5.587 seconds. Counter value: 50000000 (ok=true)
 Counter type *main.AtomicCounter took 3.690 seconds. Counter value: 50000000 (ok=true)
 Counter type *main.ShardedAtomicCounter took 0.088 seconds. Counter value: 50000000 (ok=true)
+```
+
+Results on an Intel(R) Core(TM) i7-14700K (Raptor Lake Refresh):
+
+```bash
+$ go run ./cmd/counter/
+Using 500 goroutines, 100000 iterations, 500 shards
+Counter type *main.MutexCounter took 16.043 seconds. Counter value: 50000000 (ok=true)
+Counter type *main.AtomicCounter took 0.606 seconds. Counter value: 50000000 (ok=true)
+Counter type *main.ShardedAtomicCounter took 0.056 seconds. Counter value: 50000000 (ok=true)
 ```
