@@ -1,8 +1,10 @@
 # rpz
 
-Silly simple RPC benchmarking.
+Silly simple RPC and synchronization contention benchmarking.
 
-## Run (http)
+## RPC
+
+### Run (http)
 
 Start the server
 
@@ -38,7 +40,7 @@ wrk -t4 -c100 -d10s -s wrk/post_items.lua http://localhost:8080
 
 Silly simple, right?
 
-## Run (gRPC)
+### Run (gRPC)
 
 Start the server:
 
@@ -58,7 +60,7 @@ ghz \
   localhost:9090
 ```
 
-## TLS
+### TLS
 
 The certicicates in ./cert were generated with this command:
 
@@ -69,7 +71,7 @@ openssl req -x509 -newkey rsa:2048 \
   -subj "/CN=localhost"
 ```
 
-## Benchmark results
+### Benchmark results
 
 TL;DR: locally, >50k requests per second are no issue, both for http(s) and gRPC.
 Over a local consumer 1 Gbps network, 50k+ RPS for gRPC and 30k RPS for http (no TLS)
@@ -128,4 +130,18 @@ Latency distribution:
 
 Status code distribution:
   [OK]   100000 responses 
+```
+
+## Contention
+
+With ./cmd/counter/main.go you can benchmark a counter implementation
+using `sync.Mutex`, `atomic.Int64` and a sharded atomic implementation
+that distributes updates across N atomics and aggregates them at
+query time.
+
+```bash
+Using 500 goroutines, 100000 iterations, 500 shards
+Counter type *main.MutexCounter took 5.587 seconds. Counter value: 50000000 (ok=true)
+Counter type *main.AtomicCounter took 3.690 seconds. Counter value: 50000000 (ok=true)
+Counter type *main.ShardedAtomicCounter took 0.088 seconds. Counter value: 50000000 (ok=true)
 ```
