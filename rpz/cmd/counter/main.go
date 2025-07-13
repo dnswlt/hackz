@@ -9,9 +9,13 @@ import (
 	"time"
 )
 
-type Counter interface {
-	Incr()
+type Valuer interface {
 	Value() int64
+}
+
+type Counter interface {
+	Valuer
+	Incr()
 }
 
 type MutexCounter struct {
@@ -96,32 +100,35 @@ func runConcurrentTest(f func(goroNum int), goroCount int) time.Duration {
 	return time.Since(started)
 }
 
-func runShardedTest(counter *ShardedAtomicCounter, goroCount, iterCount int) {
-	n := counter.Shards()
+func runBenchmark(counter Valuer, goroCount, iterCount int, testFunc func(goroNum int)) {
+	d := runConcurrentTest(testFunc, goroCount)
 
-	d := runConcurrentTest(func(goroNum int) {
-		for i := range iterCount {
-			counter.Incr((goroNum*iterCount + i) % n)
-		}
-	}, goroCount)
+	finalValue := counter.Value()
+	expectedValue := int64(goroCount * iterCount)
+	ok := finalValue == expectedValue
 
-	ok := counter.Value() == int64(goroCount*iterCount)
 	t := reflect.TypeOf(counter)
 	fmt.Printf("Counter type %v took %.3f seconds. Counter value: %d (ok=%t)\n",
-		t, d.Seconds(), counter.Value(), ok)
+		t, d.Seconds(), finalValue, ok)
 }
 
 func runTest(counter Counter, goroCount, iterCount int) {
-	d := runConcurrentTest(func(goroNum int) {
+	logic := func(_ int) {
 		for range iterCount {
 			counter.Incr()
 		}
-	}, goroCount)
+	}
+	runBenchmark(counter, goroCount, iterCount, logic)
+}
 
-	ok := counter.Value() == int64(goroCount*iterCount)
-	t := reflect.TypeOf(counter)
-	fmt.Printf("Counter type %v took %.3f seconds. Counter value: %d (ok=%t)\n",
-		t, d.Seconds(), counter.Value(), ok)
+func runShardedTest(counter *ShardedAtomicCounter, goroCount, iterCount int) {
+	n := counter.Shards()
+	logic := func(goroNum int) {
+		for i := range iterCount {
+			counter.Incr((goroNum*iterCount + i) % n)
+		}
+	}
+	runBenchmark(counter, goroCount, iterCount, logic)
 }
 
 func main() {
@@ -135,14 +142,8 @@ func main() {
 		*shardCount = *goroCount
 	}
 
-	var counters []Counter = []Counter{
-		&MutexCounter{},
-		&AtomicCounter{},
-	}
-
 	fmt.Printf("Using %d goroutines, %d iterations, %d shards\n", *goroCount, *iterCount, *shardCount)
-	for _, counter := range counters {
-		runTest(counter, *goroCount, *iterCount)
-	}
+	runTest(&MutexCounter{}, *goroCount, *iterCount)
+	runTest(&AtomicCounter{}, *goroCount, *iterCount)
 	runShardedTest(NewShardedAtomicCounter(*shardCount), *goroCount, *iterCount)
 }
