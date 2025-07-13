@@ -40,6 +40,14 @@ wrk -t4 -c100 -d10s -s wrk/post_items.lua http://localhost:8080
 
 Silly simple, right?
 
+#### Use k6
+
+While `wkr` is nice for http/1.1 without TLS, `k6` supports http/2 and TLS:
+
+```bash
+k6 run --env HOSTNAME=localhost --env VU_COUNT=200 k6/script.js 
+```
+
 ### Run (gRPC)
 
 Start the server:

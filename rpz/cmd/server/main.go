@@ -9,7 +9,7 @@ import (
 
 func main() {
 	mode := flag.String("mode", "grpc", "Server mode: {grpc, http}")
-	insecure := flag.Bool("insecure", false, "If false, TLS is disabled")
+	insecure := flag.Bool("insecure", false, "If true, TLS is disabled")
 	certFile := flag.String("tls-cert", "certs/dev_cert.pem", "TLS certificate")
 	keyFile := flag.String("tls-key", "certs/dev_key.pem", "TLS key")
 	flag.Parse()
@@ -24,7 +24,11 @@ func main() {
 			s.Serve()
 		}
 	case "http":
-		log.Println("Starting HTTP server...")
+		proto := "https"
+		if *insecure {
+			proto = "http"
+		}
+		log.Printf("Starting %s server...\n", proto)
 		s := &rpz.HTTPServer{}
 		if !*insecure {
 			s.ServeTLS(*certFile, *keyFile)
