@@ -1,47 +1,46 @@
 package rpz
 
 import (
-	"encoding/json"
+	"io"
 	"log"
 	"net/http"
 	"sync"
-	"time"
+
+	"github.com/dnswlt/hackz/rpz/rpzpb"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type HTTPServer struct {
-	mu    sync.Mutex
-	items map[string]Item
+	config Config
+	mu     sync.Mutex
+	items  map[string]*rpzpb.Item
 }
 
-type Item struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	Timestamp time.Time `json:"timestamp"`
-}
-
-func (s *HTTPServer) Serve() {
-	s.items = make(map[string]Item)
-
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /rpz/items/{itemID}", s.handleGetItem)
-	mux.HandleFunc("POST /rpz/items", s.handlePostItem)
-
-	log.Println("Listening on :8080")
-	if err := http.ListenAndServe(":8080", mux); err != nil {
-		log.Fatalf("Server failed: %v", err)
+func NewHTTPServer(config Config) *HTTPServer {
+	return &HTTPServer{
+		config: config,
+		items:  make(map[string]*rpzpb.Item),
 	}
 }
 
-func (s *HTTPServer) ServeTLS(certFile, keyFile string) {
-	s.items = make(map[string]Item)
-
+func (s *HTTPServer) Serve() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /rpz/items/{itemID}", s.handleGetItem)
 	mux.HandleFunc("POST /rpz/items", s.handlePostItem)
 
-	log.Println("Listening on :8443")
-	if err := http.ListenAndServeTLS(":8443", certFile, keyFile, mux); err != nil {
-		log.Fatalf("Server failed: %v", err)
+	if !s.config.Insecure {
+		// TLS
+		log.Println("Listening on :8443")
+		if err := http.ListenAndServeTLS(":8443", s.config.CertFile, s.config.KeyFile, mux); err != nil {
+			log.Fatalf("Server failed: %v", err)
+		}
+	} else {
+		// No TLS. Insecure!
+		log.Println("Listening on :8080")
+		if err := http.ListenAndServe(":8080", mux); err != nil {
+			log.Fatalf("Server failed: %v", err)
+		}
 	}
 }
 
@@ -58,22 +57,42 @@ func (s *HTTPServer) handleGetItem(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(item)
+	out, err := protojson.Marshal(item)
+	if err != nil {
+		log.Fatalf("Cannot marshal own proto as json: %v", err)
+	}
+	w.Write(out)
 }
 
 func (s *HTTPServer) handlePostItem(w http.ResponseWriter, r *http.Request) {
-	var item Item
-	if err := json.NewDecoder(r.Body).Decode(&item); err != nil {
+	var item rpzpb.Item
+
+	defer r.Body.Close()
+	bs, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "cannot read http request body", http.StatusInternalServerError)
+		return
+	}
+
+	if err := protojson.Unmarshal(bs, &item); err != nil {
 		http.Error(w, "invalid JSON", http.StatusBadRequest)
 		return
 	}
 
-	item.Timestamp = time.Now()
+	item.Timestamp = timestamppb.Now()
+	if s.config.PayloadBytes > 0 {
+		item.Payload = randomString(s.config.PayloadBytes)
+	}
 
 	s.mu.Lock()
-	s.items[item.ID] = item
+	s.items[item.Id] = &item
 	s.mu.Unlock()
 
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(item)
+	out, err := protojson.Marshal(&item)
+	if err != nil {
+		log.Fatalf("Cannot marshal own proto as json: %v", err)
+	}
+	w.Write(out)
 }

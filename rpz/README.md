@@ -4,6 +4,17 @@ Silly simple RPC and synchronization contention benchmarking.
 
 ## RPC
 
+### Proto
+
+Protocol buffers are part of the repo. To regenerate:
+
+```bash
+protoc \                      
+  --go_out=. --go_opt=module=github.com/dnswlt/hackz/rpz \
+  --go-grpc_out=. --go-grpc_opt=module=github.com/dnswlt/hackz/rpz \
+  proto/item_service.proto
+```
+
 ### Run (http)
 
 Start the server

@@ -18,13 +18,15 @@ import (
 type GRPCServer struct {
 	rpzpb.UnimplementedItemServiceServer
 
-	mu    sync.RWMutex
-	items map[string]*rpzpb.Item
+	config Config
+	mu     sync.RWMutex
+	items  map[string]*rpzpb.Item
 }
 
-func NewGRPCServer() *GRPCServer {
+func NewGRPCServer(config Config) *GRPCServer {
 	return &GRPCServer{
-		items: make(map[string]*rpzpb.Item),
+		config: config,
+		items:  make(map[string]*rpzpb.Item),
 	}
 }
 
@@ -60,30 +62,24 @@ func (s *GRPCServer) Serve() {
 		log.Fatalf("failed to listen: %v", err)
 	}
 
-	grpcServer := grpc.NewServer()
+	var grpcServer *grpc.Server
+
+	if !s.config.Insecure {
+		// TLS
+		creds, err := credentials.NewServerTLSFromFile(s.config.CertFile, s.config.KeyFile)
+		if err != nil {
+			log.Fatalf("failed to load TLS credentials: %v", err)
+		}
+
+		grpcServer = grpc.NewServer(grpc.Creds(creds))
+	} else {
+		// No TLS, insecure!
+		grpcServer = grpc.NewServer()
+	}
+
 	rpzpb.RegisterItemServiceServer(grpcServer, s)
 
 	log.Println("gRPC server listening on :9090")
-	if err := grpcServer.Serve(lis); err != nil {
-		log.Fatalf("gRPC server failed: %v", err)
-	}
-}
-
-func (s *GRPCServer) ServeTLS(certFile, keyFile string) {
-	lis, err := net.Listen("tcp", ":9090")
-	if err != nil {
-		log.Fatalf("failed to listen: %v", err)
-	}
-
-	creds, err := credentials.NewServerTLSFromFile(certFile, keyFile)
-	if err != nil {
-		log.Fatalf("failed to load TLS credentials: %v", err)
-	}
-
-	grpcServer := grpc.NewServer(grpc.Creds(creds))
-	rpzpb.RegisterItemServiceServer(grpcServer, s)
-
-	log.Println("gRPC TLS server listening on :9090")
 	if err := grpcServer.Serve(lis); err != nil {
 		log.Fatalf("gRPC server failed: %v", err)
 	}
