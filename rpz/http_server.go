@@ -81,7 +81,7 @@ func (s *HTTPServer) handlePostItem(w http.ResponseWriter, r *http.Request) {
 
 	item.Timestamp = timestamppb.Now()
 	if s.config.PayloadBytes > 0 {
-		item.Payload = randomString(s.config.PayloadBytes)
+		item.Payload = RandomString(s.config.PayloadBytes)
 	}
 
 	s.mu.Lock()
