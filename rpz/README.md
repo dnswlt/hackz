@@ -163,10 +163,13 @@ Results on an M1 Pro:
 ```bash
 $ go run ./cmd/counter/
 Using 500 goroutines, 100000 iterations, 500 shards
-Counter type *main.MutexCounter took 5.587 seconds. Counter value: 50000000 (ok=true)
-Counter type *main.AtomicCounter took 3.690 seconds. Counter value: 50000000 (ok=true)
-Counter type *main.ShardedAtomicCounter took 0.088 seconds. Counter value: 50000000 (ok=true)
+Counter type *main.MutexCounter took 5.580 seconds. Counter value: 50000000 (ok=true)
+Counter type *main.AtomicCounter took 3.677 seconds. Counter value: 50000000 (ok=true)
+Counter type *main.ShardedAtomicCounter took 0.087 seconds. Counter value: 50000000 (ok=true)
+Counter type *main.ChannelBasedCounter took 21.165 seconds. Counter value: 50000000 (ok=true)
 ```
+
+*Ouch: the ChannelBasedCounter performance is miserable.*
 
 Results on an Intel(R) Core(TM) i7-14700K (Raptor Lake Refresh):
 

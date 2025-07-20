@@ -74,6 +74,16 @@ func (c *ShardedAtomicCounter) Shards() int {
 	return len(c.n)
 }
 
+type ChannelBasedCounter struct {
+	counterCh chan<- int64
+	resultCh  <-chan int64
+}
+
+func (c *ChannelBasedCounter) Value() int64 {
+	close(c.counterCh)
+	return <-c.resultCh
+}
+
 func runConcurrentTest(f func(goroNum int), goroCount int) time.Duration {
 	var done sync.WaitGroup
 	var ready sync.WaitGroup
@@ -131,6 +141,25 @@ func runShardedTest(counter *ShardedAtomicCounter, goroCount, iterCount int) {
 	runBenchmark(counter, goroCount, iterCount, logic)
 }
 
+func runChannelTest(goroCount, iterCount int) {
+	counterCh := make(chan int64)
+	resultCh := make(chan int64)
+	go func() {
+		var total int64
+		for i := range counterCh {
+			total += i
+		}
+		resultCh <- total
+	}()
+	logic := func(_ int) {
+		for range iterCount {
+			counterCh <- 1
+		}
+	}
+	counter := ChannelBasedCounter{counterCh: counterCh, resultCh: resultCh}
+	runBenchmark(&counter, goroCount, iterCount, logic)
+}
+
 func main() {
 
 	goroCount := flag.Int("goroutines", 500, "Number of concurrent goroutines to run")
@@ -146,4 +175,5 @@ func main() {
 	runTest(&MutexCounter{}, *goroCount, *iterCount)
 	runTest(&AtomicCounter{}, *goroCount, *iterCount)
 	runShardedTest(NewShardedAtomicCounter(*shardCount), *goroCount, *iterCount)
+	runChannelTest(*goroCount, *iterCount)
 }
