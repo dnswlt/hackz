@@ -1,3 +1,4 @@
+from collections import defaultdict
 import csv
 from io import StringIO
 from dataclasses import dataclass
@@ -68,19 +69,26 @@ class Node:
         )
 
 
-def parse_workload_data(workload_csv):
+def parse_workload_data(workload_csv, skip_header=True):
     """Parses CSV data into a list of Process dataclasses."""
     processes = []
     # Use StringIO to treat the string as a file
     reader = csv.reader(StringIO(workload_csv))
-    header = next(reader) # Skip header
+    if skip_header:
+        _ = next(reader) # Skip header
+    seen_names = defaultdict(lambda: 0)
     for row in reader:
         if not row or row[0].strip().startswith('#'): # Skip empty or commented lines
             continue
         try:
             # Create a Process object instead of a dictionary
+            name = row[0].strip()
+            seen_names[name] += 1
+            if seen_names[name] > 1:
+                # Regard same process name on multiple lines as separate processes.
+                name = f"{name}[{seen_names[name]}]"
             processes.append(Process(
-                name=row[0].strip(),
+                name=name,
                 memory=float(row[1]),
                 cpu=float(row[2]),
                 instances=int(row[3])
@@ -165,7 +173,7 @@ if __name__ == "__main__":
         workload_data = f.read()
 
     # --- Main Execution ---
-    processes = parse_workload_data(workload_data)
+    processes = parse_workload_data(workload_data, skip_header=True)
     final_nodes = calculate_node_requirements(
         processes,
         NODE_TOTAL_CPU,
