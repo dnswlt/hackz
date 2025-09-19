@@ -1,0 +1,10 @@
+process_name,memory,cpu,instances
+# High-memory services
+data-importer,8,4,4
+analytics-engine,10,2,3
+# Medium-memory services
+api-gateway,4,2,6
+user-service,4,1,8
+# Low-memory, high-replica services
+cache-service,1,0.5,15
+monitoring-agent,0.5,0.25,10
