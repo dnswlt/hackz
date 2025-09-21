@@ -1,0 +1,62 @@
+# Document 1: Something resembling a DeploymentConfig
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-app # Indentation creates a nested object
+containers:
+  - name: nginx        # First element of the list
+    image: nginx:1.21
+  - name: sidecar      # Second element of the list
+    image: istio/proxyv2:1.10
+ssh_known_hosts: |
+  Host github.com
+    HostName github.com
+    IdentityFile ~/.ssh/id_rsa
+description: >
+  This is a very long description
+  that spans multiple lines in the YAML file,
+  but will be parsed as a single continuous line
+  of text.
+# Define a reusable block for resource requests/limits
+default_resources: &default_resources
+  limits:
+    memory: "256Mi"
+    cpu: "200m"
+  requests:
+    memory: "128Mi"
+    cpu: "100m"
+spec:
+  template:
+    spec:
+      containers:
+        - name: main-app
+          image: my-app:latest
+          resources: *default_resources # Use the alias here
+        - name: sidecar
+          image: my-sidecar:latest
+          resources: *default_resources # And use it again here
+high_memory_resources:
+  <<: *default_resources # Inherit from the default anchor
+  limits:                # Override just the memory limit (removes the cpu limit)
+    memory: "1024Mi"
+---
+# Document 2: Something completely different.
+prose: >
+  What's in a name?
+  That which we call a newline
+
+  Has to be two in this > block.
+code: |
+  def something_cool():
+    return "ice"
+numbers:
+  - 1
+  - 2
+  - 3
+numbers_as_strings:
+  - "1"
+  - "2"
+boolean: true
+bool_as_str: "false"
+quotedString: "this is also possible"
+singleQuotedString: 'single quotes are lame'
