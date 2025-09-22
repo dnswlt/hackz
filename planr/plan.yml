@@ -1,0 +1,42 @@
+applications:
+  - name: CapaOpt
+    modules:
+      - name: Timetable
+        processes:
+          - name: timetable-dataprovider
+            interfaces:
+              consumed:
+                topology-data:
+                  producer: any
+              produced:
+                timetable-data:
+                  visiblity: public
+            databases:
+              timetable-oracle:
+                mode: read
+            planned_release: "7.6.0"
+          - name: timetable-exporter
+            planned_release: "7.6.0"
+      - name: ODA
+  - name: ALEA
+# Interfaces are abstract communication channels between applications, modules, processes.
+interfaces:
+  - name: timetable-data
+    protocol: solace
+    schema: https://example.com/schemas/timetable-data/service.proto
+  - name: topology-data
+    protocol: kafka
+    schema: https://example.com/schemas/topology-data/service.proto
+databases:
+  - name: rcs
+    schemas:
+      - name: rcsus_fahrplan
+    location: legacy
+  - name: timetable-oracle
+    schemas: 
+      - name: rcsus_timetable
+    location: halon
+releases:
+  - name: "7.6.0"
+    freeze_date: "2026-06-30"
+    golive_date: "2026-10-01"

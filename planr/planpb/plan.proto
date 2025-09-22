@@ -1,0 +1,73 @@
+syntax = "proto3";
+
+package migration;
+
+option go_package = "github.com/dnswlt/hackz/planr/planpb";
+
+// The top-level structure of the plan.yml file
+message Plan {
+  repeated Application applications = 1;
+  repeated Interface interfaces = 2;
+  repeated Database databases = 3;
+  repeated Release releases = 4;
+}
+
+// ABB L2.
+message Application {
+  string name = 1;
+  repeated Module modules = 2;
+}
+
+// ABB L3.
+message Module {
+  string name = 1;
+  repeated Process processes = 2;
+}
+
+// ABB L4.
+message Process {
+  string name = 1;
+  string planned_release = 2;
+  ProcessInterfaces interfaces = 3;
+  map<string, DatabaseConnection> databases = 4;
+}
+
+
+message ProcessInterfaces {
+  map<string, ConsumedInterface> consumed = 1;
+  map<string, ProducedInterface> produced = 2;
+}
+
+message ConsumedInterface {
+    string producer = 1;
+}
+
+message ProducedInterface {
+    string visibility = 1;
+}
+
+message DatabaseConnection {
+  string mode = 2;
+}
+
+message Interface {
+  string name = 1;
+  string protocol = 2;
+  string schema = 3;
+}
+
+message Database {
+  string name = 1;
+  string location = 2;
+  repeated DatabaseSchema schemas = 3;
+}
+
+message DatabaseSchema {
+  string name = 1;
+}
+
+message Release {
+    string name = 1;
+    string freeze_date = 2;
+    string golive_date = 3;
+}

@@ -1,0 +1,209 @@
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "$ref": "#/definitions/Plan",
+    "definitions": {
+        "Plan": {
+            "properties": {
+                "applications": {
+                    "items": {
+                        "$ref": "#/definitions/migration.Application"
+                    },
+                    "type": "array"
+                },
+                "interfaces": {
+                    "items": {
+                        "$ref": "#/definitions/migration.Interface"
+                    },
+                    "type": "array"
+                },
+                "databases": {
+                    "items": {
+                        "$ref": "#/definitions/migration.Database"
+                    },
+                    "type": "array"
+                },
+                "releases": {
+                    "items": {
+                        "$ref": "#/definitions/migration.Release"
+                    },
+                    "type": "array"
+                }
+            },
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Plan",
+            "description": "The top-level structure of the plan.yml file"
+        },
+        "migration.Application": {
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "modules": {
+                    "items": {
+                        "$ref": "#/definitions/migration.Module"
+                    },
+                    "type": "array"
+                }
+            },
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Application",
+            "description": "ABB L2."
+        },
+        "migration.ConsumedInterface": {
+            "properties": {
+                "producer": {
+                    "type": "string"
+                }
+            },
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Consumed Interface"
+        },
+        "migration.Database": {
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "location": {
+                    "type": "string"
+                },
+                "schemas": {
+                    "items": {
+                        "$ref": "#/definitions/migration.DatabaseSchema"
+                    },
+                    "type": "array"
+                }
+            },
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Database"
+        },
+        "migration.DatabaseConnection": {
+            "properties": {
+                "mode": {
+                    "type": "string"
+                }
+            },
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Database Connection"
+        },
+        "migration.DatabaseSchema": {
+            "properties": {
+                "name": {
+                    "type": "string"
+                }
+            },
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Database Schema"
+        },
+        "migration.Interface": {
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "protocol": {
+                    "type": "string"
+                },
+                "schema": {
+                    "type": "string"
+                }
+            },
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Interface"
+        },
+        "migration.Module": {
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "processes": {
+                    "items": {
+                        "$ref": "#/definitions/migration.Process"
+                    },
+                    "type": "array"
+                }
+            },
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Module",
+            "description": "ABB L3."
+        },
+        "migration.Process": {
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "planned_release": {
+                    "type": "string"
+                },
+                "interfaces": {
+                    "$ref": "#/definitions/migration.ProcessInterfaces",
+                    "additionalProperties": true
+                },
+                "databases": {
+                    "additionalProperties": {
+                        "$ref": "#/definitions/migration.DatabaseConnection",
+                        "additionalProperties": true
+                    },
+                    "type": "object"
+                }
+            },
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Process",
+            "description": "ABB L4."
+        },
+        "migration.ProcessInterfaces": {
+            "properties": {
+                "consumed": {
+                    "additionalProperties": {
+                        "$ref": "#/definitions/migration.ConsumedInterface",
+                        "additionalProperties": true
+                    },
+                    "type": "object"
+                },
+                "produced": {
+                    "additionalProperties": {
+                        "$ref": "#/definitions/migration.ProducedInterface",
+                        "additionalProperties": true
+                    },
+                    "type": "object"
+                }
+            },
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Process Interfaces"
+        },
+        "migration.ProducedInterface": {
+            "properties": {
+                "visibility": {
+                    "type": "string"
+                }
+            },
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Produced Interface"
+        },
+        "migration.Release": {
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "freeze_date": {
+                    "type": "string"
+                },
+                "golive_date": {
+                    "type": "string"
+                }
+            },
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Release"
+        }
+    }
+}

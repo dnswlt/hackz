@@ -1,0 +1,99 @@
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "$ref": "#/definitions/Module",
+    "definitions": {
+        "Module": {
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "processes": {
+                    "items": {
+                        "$ref": "#/definitions/migration.Process"
+                    },
+                    "type": "array"
+                }
+            },
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Module",
+            "description": "ABB L3."
+        },
+        "migration.ConsumedInterface": {
+            "properties": {
+                "producer": {
+                    "type": "string"
+                }
+            },
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Consumed Interface"
+        },
+        "migration.DatabaseConnection": {
+            "properties": {
+                "mode": {
+                    "type": "string"
+                }
+            },
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Database Connection"
+        },
+        "migration.Process": {
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "planned_release": {
+                    "type": "string"
+                },
+                "interfaces": {
+                    "$ref": "#/definitions/migration.ProcessInterfaces",
+                    "additionalProperties": true
+                },
+                "databases": {
+                    "additionalProperties": {
+                        "$ref": "#/definitions/migration.DatabaseConnection",
+                        "additionalProperties": true
+                    },
+                    "type": "object"
+                }
+            },
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Process",
+            "description": "ABB L4."
+        },
+        "migration.ProcessInterfaces": {
+            "properties": {
+                "consumed": {
+                    "additionalProperties": {
+                        "$ref": "#/definitions/migration.ConsumedInterface",
+                        "additionalProperties": true
+                    },
+                    "type": "object"
+                },
+                "produced": {
+                    "additionalProperties": {
+                        "$ref": "#/definitions/migration.ProducedInterface",
+                        "additionalProperties": true
+                    },
+                    "type": "object"
+                }
+            },
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Process Interfaces"
+        },
+        "migration.ProducedInterface": {
+            "properties": {
+                "visibility": {
+                    "type": "string"
+                }
+            },
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Produced Interface"
+        }
+    }
+}
