@@ -7,9 +7,10 @@ import (
 	"log"
 	"os"
 
+	"github.com/dnswlt/hackz/planr/internal/planr"
 	"github.com/dnswlt/hackz/planr/planpb"
 
-	"gopkg.in/yaml.v3"
+	"sigs.k8s.io/yaml"
 )
 
 func main() {
@@ -29,6 +30,13 @@ func main() {
 	}
 
 	fmt.Printf("Read %d applications from %s\n", len(plan.GetApplications()), *planFile)
+
+	if err := planr.ValidatePlan(&plan); err != nil {
+		log.Fatalf("Plan validation failed: %v", err)
+	} else {
+		log.Println("Plan validated successfully.")
+	}
+
 	for i, app := range plan.GetApplications() {
 		fmt.Printf("Application #%d: %s\n", i, app.Name)
 	}
