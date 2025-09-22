@@ -1,5 +1,5 @@
 applications:
-  - name: CapaOpt
+  - name: ApplicationOne
     modules:
       - name: Timetable
         processes:
@@ -14,11 +14,11 @@ applications:
             databases:
               timetable-oracle:
                 mode: read
-            planned_release: "7.6.0"
+            planned_release: "1.2.0"
           - name: timetable-exporter
-            planned_release: "7.6.0"
+            planned_release: "1.2.0"
       - name: ODA
-  - name: ALEA
+  - name: ApplicationTwo
 # Interfaces are abstract communication channels between applications, modules, processes.
 interfaces:
   - name: timetable-data
@@ -28,15 +28,15 @@ interfaces:
     protocol: kafka
     schema: https://example.com/schemas/topology-data/service.proto
 databases:
-  - name: rcs
+  - name: legacy-db
     schemas:
-      - name: rcsus_fahrplan
+      - name: legacy-timetable
     location: legacy
   - name: timetable-oracle
     schemas: 
-      - name: rcsus_timetable
-    location: halon
+      - name: timetable
+    location: aws
 releases:
-  - name: "7.6.0"
+  - name: "1.2.0"
     freeze_date: "2026-06-30"
     golive_date: "2026-10-01"
