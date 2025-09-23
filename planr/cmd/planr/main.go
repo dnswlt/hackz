@@ -37,7 +37,7 @@ func main() {
 		log.Println("Plan validated successfully.")
 	}
 
-	bs, err := yaml.Marshal(plan)
+	bs, err := yaml.Marshal(&plan)
 	if err != nil {
 		log.Fatalf("Error marshaling YAML: %v", err)
 	}
