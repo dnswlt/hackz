@@ -14,9 +14,9 @@ func ValidateProcesses(plan *planpb.Plan) error {
 	for _, iface := range plan.GetInterfaces() {
 		interfaces[iface.Name] = true
 	}
-	databases := map[string]bool{}
-	for _, db := range plan.GetDatabases() {
-		databases[db.Name] = true
+	datastores := map[string]bool{}
+	for _, ds := range plan.GetDatastores() {
+		datastores[ds.Name] = true
 	}
 	releases := map[string]bool{}
 	for _, rel := range plan.GetReleases() {
@@ -39,19 +39,21 @@ func ValidateProcesses(plan *planpb.Plan) error {
 					}
 				}
 
-				// Undefined databases
-				for db := range p.GetDatabases() {
-					if !databases[db] {
-						return fmt.Errorf("process %s uses undefined database %s", p.Name, db)
+				// Undefined datastores
+				for db := range p.GetDatastores() {
+					if !datastores[db] {
+						return fmt.Errorf("process %s uses undefined datastore %s", p.Name, db)
 					}
 				}
 
 				// Undefined releases
-				rel := p.GetPlannedRelease()
-				if !releases[rel] {
-					return fmt.Errorf("process %s uses undefined release %s", p.Name, rel)
-				}
+				for _, chg := range p.GetChanges() {
+					rel := chg.PlannedRelease
+					if rel != "" && !releases[rel] {
+						return fmt.Errorf("process %s uses undefined release %s", p.Name, rel)
+					}
 
+				}
 			}
 		}
 	}
@@ -69,13 +71,13 @@ func ValidateInterfaces(plan *planpb.Plan) error {
 	return nil
 }
 
-func ValidateDatabases(plan *planpb.Plan) error {
-	dbs := map[string]bool{}
-	for _, db := range plan.GetDatabases() {
-		if dbs[db.Name] {
-			return fmt.Errorf("duplicate database definition: %s", db.Name)
+func ValidateDatastores(plan *planpb.Plan) error {
+	stores := map[string]bool{}
+	for _, s := range plan.GetDatastores() {
+		if stores[s.Name] {
+			return fmt.Errorf("duplicate datastore definition: %s", s.Name)
 		}
-		dbs[db.Name] = true
+		stores[s.Name] = true
 	}
 	return nil
 }
@@ -102,7 +104,7 @@ func ValidatePlan(plan *planpb.Plan) error {
 	if err := ValidateInterfaces(plan); err != nil {
 		return err
 	}
-	if err := ValidateDatabases(plan); err != nil {
+	if err := ValidateDatastores(plan); err != nil {
 		return err
 	}
 	if err := ValidateReleases(plan); err != nil {

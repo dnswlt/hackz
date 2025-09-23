@@ -1,25 +1,22 @@
 {
     "$schema": "http://json-schema.org/draft-04/schema#",
-    "$ref": "#/definitions/Interface",
+    "$ref": "#/definitions/Change",
     "definitions": {
-        "Interface": {
+        "Change": {
             "properties": {
-                "name": {
+                "type": {
                     "type": "string"
                 },
-                "description": {
+                "planned_release": {
                     "type": "string"
                 },
-                "protocol": {
-                    "type": "string"
-                },
-                "schema": {
+                "planned_date": {
                     "type": "string"
                 }
             },
             "additionalProperties": true,
             "type": "object",
-            "title": "Interface"
+            "title": "Change"
         }
     }
 }

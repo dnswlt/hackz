@@ -16,9 +16,9 @@
                     },
                     "type": "array"
                 },
-                "databases": {
+                "datastores": {
                     "items": {
-                        "$ref": "#/definitions/migration.Database"
+                        "$ref": "#/definitions/migration.Datastore"
                     },
                     "type": "array"
                 },
@@ -39,6 +39,9 @@
                 "name": {
                     "type": "string"
                 },
+                "description": {
+                    "type": "string"
+                },
                 "modules": {
                     "items": {
                         "$ref": "#/definitions/migration.Module"
@@ -51,6 +54,22 @@
             "title": "Application",
             "description": "ABB L2."
         },
+        "migration.Change": {
+            "properties": {
+                "type": {
+                    "type": "string"
+                },
+                "planned_release": {
+                    "type": "string"
+                },
+                "planned_date": {
+                    "type": "string"
+                }
+            },
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Change"
+        },
         "migration.ConsumedInterface": {
             "properties": {
                 "producer": {
@@ -60,35 +79,6 @@
             "additionalProperties": true,
             "type": "object",
             "title": "Consumed Interface"
-        },
-        "migration.Database": {
-            "properties": {
-                "name": {
-                    "type": "string"
-                },
-                "location": {
-                    "type": "string"
-                },
-                "schemas": {
-                    "items": {
-                        "$ref": "#/definitions/migration.DatabaseSchema"
-                    },
-                    "type": "array"
-                }
-            },
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Database"
-        },
-        "migration.DatabaseConnection": {
-            "properties": {
-                "mode": {
-                    "type": "string"
-                }
-            },
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Database Connection"
         },
         "migration.DatabaseSchema": {
             "properties": {
@@ -100,9 +90,64 @@
             "type": "object",
             "title": "Database Schema"
         },
+        "migration.Datastore": {
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "type": {
+                    "enum": [
+                        "UNSPECIFIED_TYPE",
+                        0,
+                        "DATABASE",
+                        1,
+                        "CACHE",
+                        2
+                    ],
+                    "oneOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "type": "integer"
+                        }
+                    ],
+                    "title": "Type"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "location": {
+                    "type": "string"
+                },
+                "schemas": {
+                    "items": {
+                        "$ref": "#/definitions/migration.DatabaseSchema"
+                    },
+                    "type": "array",
+                    "description": "For databases only:"
+                }
+            },
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Datastore"
+        },
+        "migration.DatastoreConnection": {
+            "properties": {
+                "mode": {
+                    "type": "string"
+                }
+            },
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Datastore Connection"
+        },
         "migration.Interface": {
             "properties": {
                 "name": {
+                    "type": "string"
+                },
+                "description": {
                     "type": "string"
                 },
                 "protocol": {
@@ -119,6 +164,9 @@
         "migration.Module": {
             "properties": {
                 "name": {
+                    "type": "string"
+                },
+                "description": {
                     "type": "string"
                 },
                 "processes": {
@@ -138,19 +186,25 @@
                 "name": {
                     "type": "string"
                 },
-                "planned_release": {
+                "description": {
                     "type": "string"
                 },
                 "interfaces": {
                     "$ref": "#/definitions/migration.ProcessInterfaces",
                     "additionalProperties": true
                 },
-                "databases": {
+                "datastores": {
                     "additionalProperties": {
-                        "$ref": "#/definitions/migration.DatabaseConnection",
+                        "$ref": "#/definitions/migration.DatastoreConnection",
                         "additionalProperties": true
                     },
                     "type": "object"
+                },
+                "changes": {
+                    "items": {
+                        "$ref": "#/definitions/migration.Change"
+                    },
+                    "type": "array"
                 }
             },
             "additionalProperties": true,

@@ -21,12 +21,61 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type Datastore_Type int32
+
+const (
+	Datastore_UNSPECIFIED_TYPE Datastore_Type = 0
+	Datastore_DATABASE         Datastore_Type = 1
+	Datastore_CACHE            Datastore_Type = 2
+)
+
+// Enum value maps for Datastore_Type.
+var (
+	Datastore_Type_name = map[int32]string{
+		0: "UNSPECIFIED_TYPE",
+		1: "DATABASE",
+		2: "CACHE",
+	}
+	Datastore_Type_value = map[string]int32{
+		"UNSPECIFIED_TYPE": 0,
+		"DATABASE":         1,
+		"CACHE":            2,
+	}
+)
+
+func (x Datastore_Type) Enum() *Datastore_Type {
+	p := new(Datastore_Type)
+	*p = x
+	return p
+}
+
+func (x Datastore_Type) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (Datastore_Type) Descriptor() protoreflect.EnumDescriptor {
+	return file_planpb_plan_proto_enumTypes[0].Descriptor()
+}
+
+func (Datastore_Type) Type() protoreflect.EnumType {
+	return &file_planpb_plan_proto_enumTypes[0]
+}
+
+func (x Datastore_Type) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use Datastore_Type.Descriptor instead.
+func (Datastore_Type) EnumDescriptor() ([]byte, []int) {
+	return file_planpb_plan_proto_rawDescGZIP(), []int{10, 0}
+}
+
 // The top-level structure of the plan.yml file
 type Plan struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Applications  []*Application         `protobuf:"bytes,1,rep,name=applications,proto3" json:"applications,omitempty"`
 	Interfaces    []*Interface           `protobuf:"bytes,2,rep,name=interfaces,proto3" json:"interfaces,omitempty"`
-	Databases     []*Database            `protobuf:"bytes,3,rep,name=databases,proto3" json:"databases,omitempty"`
+	Datastores    []*Datastore           `protobuf:"bytes,3,rep,name=datastores,proto3" json:"datastores,omitempty"`
 	Releases      []*Release             `protobuf:"bytes,4,rep,name=releases,proto3" json:"releases,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -76,9 +125,9 @@ func (x *Plan) GetInterfaces() []*Interface {
 	return nil
 }
 
-func (x *Plan) GetDatabases() []*Database {
+func (x *Plan) GetDatastores() []*Datastore {
 	if x != nil {
-		return x.Databases
+		return x.Datastores
 	}
 	return nil
 }
@@ -94,7 +143,8 @@ func (x *Plan) GetReleases() []*Release {
 type Application struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Modules       []*Module              `protobuf:"bytes,2,rep,name=modules,proto3" json:"modules,omitempty"`
+	Description   string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
+	Modules       []*Module              `protobuf:"bytes,3,rep,name=modules,proto3" json:"modules,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -136,6 +186,13 @@ func (x *Application) GetName() string {
 	return ""
 }
 
+func (x *Application) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
 func (x *Application) GetModules() []*Module {
 	if x != nil {
 		return x.Modules
@@ -147,7 +204,8 @@ func (x *Application) GetModules() []*Module {
 type Module struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Processes     []*Process             `protobuf:"bytes,2,rep,name=processes,proto3" json:"processes,omitempty"`
+	Description   string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
+	Processes     []*Process             `protobuf:"bytes,3,rep,name=processes,proto3" json:"processes,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -189,6 +247,13 @@ func (x *Module) GetName() string {
 	return ""
 }
 
+func (x *Module) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
 func (x *Module) GetProcesses() []*Process {
 	if x != nil {
 		return x.Processes
@@ -198,13 +263,14 @@ func (x *Module) GetProcesses() []*Process {
 
 // ABB L4.
 type Process struct {
-	state          protoimpl.MessageState         `protogen:"open.v1"`
-	Name           string                         `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	PlannedRelease string                         `protobuf:"bytes,2,opt,name=planned_release,json=plannedRelease,proto3" json:"planned_release,omitempty"`
-	Interfaces     *ProcessInterfaces             `protobuf:"bytes,3,opt,name=interfaces,proto3" json:"interfaces,omitempty"`
-	Databases      map[string]*DatabaseConnection `protobuf:"bytes,4,rep,name=databases,proto3" json:"databases,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state         protoimpl.MessageState          `protogen:"open.v1"`
+	Name          string                          `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Description   string                          `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
+	Interfaces    *ProcessInterfaces              `protobuf:"bytes,3,opt,name=interfaces,proto3" json:"interfaces,omitempty"`
+	Datastores    map[string]*DatastoreConnection `protobuf:"bytes,4,rep,name=datastores,proto3" json:"datastores,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Changes       []*Change                       `protobuf:"bytes,5,rep,name=changes,proto3" json:"changes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Process) Reset() {
@@ -244,9 +310,9 @@ func (x *Process) GetName() string {
 	return ""
 }
 
-func (x *Process) GetPlannedRelease() string {
+func (x *Process) GetDescription() string {
 	if x != nil {
-		return x.PlannedRelease
+		return x.Description
 	}
 	return ""
 }
@@ -258,11 +324,78 @@ func (x *Process) GetInterfaces() *ProcessInterfaces {
 	return nil
 }
 
-func (x *Process) GetDatabases() map[string]*DatabaseConnection {
+func (x *Process) GetDatastores() map[string]*DatastoreConnection {
 	if x != nil {
-		return x.Databases
+		return x.Datastores
 	}
 	return nil
+}
+
+func (x *Process) GetChanges() []*Change {
+	if x != nil {
+		return x.Changes
+	}
+	return nil
+}
+
+type Change struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Type           string                 `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
+	PlannedRelease string                 `protobuf:"bytes,2,opt,name=planned_release,json=plannedRelease,proto3" json:"planned_release,omitempty"`
+	PlannedDate    string                 `protobuf:"bytes,3,opt,name=planned_date,json=plannedDate,proto3" json:"planned_date,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *Change) Reset() {
+	*x = Change{}
+	mi := &file_planpb_plan_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Change) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Change) ProtoMessage() {}
+
+func (x *Change) ProtoReflect() protoreflect.Message {
+	mi := &file_planpb_plan_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Change.ProtoReflect.Descriptor instead.
+func (*Change) Descriptor() ([]byte, []int) {
+	return file_planpb_plan_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *Change) GetType() string {
+	if x != nil {
+		return x.Type
+	}
+	return ""
+}
+
+func (x *Change) GetPlannedRelease() string {
+	if x != nil {
+		return x.PlannedRelease
+	}
+	return ""
+}
+
+func (x *Change) GetPlannedDate() string {
+	if x != nil {
+		return x.PlannedDate
+	}
+	return ""
 }
 
 type ProcessInterfaces struct {
@@ -275,7 +408,7 @@ type ProcessInterfaces struct {
 
 func (x *ProcessInterfaces) Reset() {
 	*x = ProcessInterfaces{}
-	mi := &file_planpb_plan_proto_msgTypes[4]
+	mi := &file_planpb_plan_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -287,7 +420,7 @@ func (x *ProcessInterfaces) String() string {
 func (*ProcessInterfaces) ProtoMessage() {}
 
 func (x *ProcessInterfaces) ProtoReflect() protoreflect.Message {
-	mi := &file_planpb_plan_proto_msgTypes[4]
+	mi := &file_planpb_plan_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -300,7 +433,7 @@ func (x *ProcessInterfaces) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProcessInterfaces.ProtoReflect.Descriptor instead.
 func (*ProcessInterfaces) Descriptor() ([]byte, []int) {
-	return file_planpb_plan_proto_rawDescGZIP(), []int{4}
+	return file_planpb_plan_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *ProcessInterfaces) GetConsumed() map[string]*ConsumedInterface {
@@ -326,7 +459,7 @@ type ConsumedInterface struct {
 
 func (x *ConsumedInterface) Reset() {
 	*x = ConsumedInterface{}
-	mi := &file_planpb_plan_proto_msgTypes[5]
+	mi := &file_planpb_plan_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -338,7 +471,7 @@ func (x *ConsumedInterface) String() string {
 func (*ConsumedInterface) ProtoMessage() {}
 
 func (x *ConsumedInterface) ProtoReflect() protoreflect.Message {
-	mi := &file_planpb_plan_proto_msgTypes[5]
+	mi := &file_planpb_plan_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -351,7 +484,7 @@ func (x *ConsumedInterface) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConsumedInterface.ProtoReflect.Descriptor instead.
 func (*ConsumedInterface) Descriptor() ([]byte, []int) {
-	return file_planpb_plan_proto_rawDescGZIP(), []int{5}
+	return file_planpb_plan_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *ConsumedInterface) GetProducer() string {
@@ -370,7 +503,7 @@ type ProducedInterface struct {
 
 func (x *ProducedInterface) Reset() {
 	*x = ProducedInterface{}
-	mi := &file_planpb_plan_proto_msgTypes[6]
+	mi := &file_planpb_plan_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -382,7 +515,7 @@ func (x *ProducedInterface) String() string {
 func (*ProducedInterface) ProtoMessage() {}
 
 func (x *ProducedInterface) ProtoReflect() protoreflect.Message {
-	mi := &file_planpb_plan_proto_msgTypes[6]
+	mi := &file_planpb_plan_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -395,7 +528,7 @@ func (x *ProducedInterface) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProducedInterface.ProtoReflect.Descriptor instead.
 func (*ProducedInterface) Descriptor() ([]byte, []int) {
-	return file_planpb_plan_proto_rawDescGZIP(), []int{6}
+	return file_planpb_plan_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *ProducedInterface) GetVisibility() string {
@@ -405,28 +538,28 @@ func (x *ProducedInterface) GetVisibility() string {
 	return ""
 }
 
-type DatabaseConnection struct {
+type DatastoreConnection struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Mode          string                 `protobuf:"bytes,2,opt,name=mode,proto3" json:"mode,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *DatabaseConnection) Reset() {
-	*x = DatabaseConnection{}
-	mi := &file_planpb_plan_proto_msgTypes[7]
+func (x *DatastoreConnection) Reset() {
+	*x = DatastoreConnection{}
+	mi := &file_planpb_plan_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *DatabaseConnection) String() string {
+func (x *DatastoreConnection) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*DatabaseConnection) ProtoMessage() {}
+func (*DatastoreConnection) ProtoMessage() {}
 
-func (x *DatabaseConnection) ProtoReflect() protoreflect.Message {
-	mi := &file_planpb_plan_proto_msgTypes[7]
+func (x *DatastoreConnection) ProtoReflect() protoreflect.Message {
+	mi := &file_planpb_plan_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -437,12 +570,12 @@ func (x *DatabaseConnection) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use DatabaseConnection.ProtoReflect.Descriptor instead.
-func (*DatabaseConnection) Descriptor() ([]byte, []int) {
-	return file_planpb_plan_proto_rawDescGZIP(), []int{7}
+// Deprecated: Use DatastoreConnection.ProtoReflect.Descriptor instead.
+func (*DatastoreConnection) Descriptor() ([]byte, []int) {
+	return file_planpb_plan_proto_rawDescGZIP(), []int{8}
 }
 
-func (x *DatabaseConnection) GetMode() string {
+func (x *DatastoreConnection) GetMode() string {
 	if x != nil {
 		return x.Mode
 	}
@@ -452,15 +585,16 @@ func (x *DatabaseConnection) GetMode() string {
 type Interface struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Protocol      string                 `protobuf:"bytes,2,opt,name=protocol,proto3" json:"protocol,omitempty"`
-	Schema        string                 `protobuf:"bytes,3,opt,name=schema,proto3" json:"schema,omitempty"`
+	Description   string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
+	Protocol      string                 `protobuf:"bytes,3,opt,name=protocol,proto3" json:"protocol,omitempty"`
+	Schema        string                 `protobuf:"bytes,4,opt,name=schema,proto3" json:"schema,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Interface) Reset() {
 	*x = Interface{}
-	mi := &file_planpb_plan_proto_msgTypes[8]
+	mi := &file_planpb_plan_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -472,7 +606,7 @@ func (x *Interface) String() string {
 func (*Interface) ProtoMessage() {}
 
 func (x *Interface) ProtoReflect() protoreflect.Message {
-	mi := &file_planpb_plan_proto_msgTypes[8]
+	mi := &file_planpb_plan_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -485,12 +619,19 @@ func (x *Interface) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Interface.ProtoReflect.Descriptor instead.
 func (*Interface) Descriptor() ([]byte, []int) {
-	return file_planpb_plan_proto_rawDescGZIP(), []int{8}
+	return file_planpb_plan_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *Interface) GetName() string {
 	if x != nil {
 		return x.Name
+	}
+	return ""
+}
+
+func (x *Interface) GetDescription() string {
+	if x != nil {
+		return x.Description
 	}
 	return ""
 }
@@ -509,30 +650,33 @@ func (x *Interface) GetSchema() string {
 	return ""
 }
 
-type Database struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Location      string                 `protobuf:"bytes,2,opt,name=location,proto3" json:"location,omitempty"`
-	Schemas       []*DatabaseSchema      `protobuf:"bytes,3,rep,name=schemas,proto3" json:"schemas,omitempty"`
+type Datastore struct {
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Name        string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Type        Datastore_Type         `protobuf:"varint,2,opt,name=type,proto3,enum=migration.Datastore_Type" json:"type,omitempty"`
+	Description string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
+	Location    string                 `protobuf:"bytes,4,opt,name=location,proto3" json:"location,omitempty"`
+	// For databases only:
+	Schemas       []*DatabaseSchema `protobuf:"bytes,5,rep,name=schemas,proto3" json:"schemas,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *Database) Reset() {
-	*x = Database{}
-	mi := &file_planpb_plan_proto_msgTypes[9]
+func (x *Datastore) Reset() {
+	*x = Datastore{}
+	mi := &file_planpb_plan_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *Database) String() string {
+func (x *Datastore) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*Database) ProtoMessage() {}
+func (*Datastore) ProtoMessage() {}
 
-func (x *Database) ProtoReflect() protoreflect.Message {
-	mi := &file_planpb_plan_proto_msgTypes[9]
+func (x *Datastore) ProtoReflect() protoreflect.Message {
+	mi := &file_planpb_plan_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -543,26 +687,40 @@ func (x *Database) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use Database.ProtoReflect.Descriptor instead.
-func (*Database) Descriptor() ([]byte, []int) {
-	return file_planpb_plan_proto_rawDescGZIP(), []int{9}
+// Deprecated: Use Datastore.ProtoReflect.Descriptor instead.
+func (*Datastore) Descriptor() ([]byte, []int) {
+	return file_planpb_plan_proto_rawDescGZIP(), []int{10}
 }
 
-func (x *Database) GetName() string {
+func (x *Datastore) GetName() string {
 	if x != nil {
 		return x.Name
 	}
 	return ""
 }
 
-func (x *Database) GetLocation() string {
+func (x *Datastore) GetType() Datastore_Type {
+	if x != nil {
+		return x.Type
+	}
+	return Datastore_UNSPECIFIED_TYPE
+}
+
+func (x *Datastore) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *Datastore) GetLocation() string {
 	if x != nil {
 		return x.Location
 	}
 	return ""
 }
 
-func (x *Database) GetSchemas() []*DatabaseSchema {
+func (x *Datastore) GetSchemas() []*DatabaseSchema {
 	if x != nil {
 		return x.Schemas
 	}
@@ -578,7 +736,7 @@ type DatabaseSchema struct {
 
 func (x *DatabaseSchema) Reset() {
 	*x = DatabaseSchema{}
-	mi := &file_planpb_plan_proto_msgTypes[10]
+	mi := &file_planpb_plan_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -590,7 +748,7 @@ func (x *DatabaseSchema) String() string {
 func (*DatabaseSchema) ProtoMessage() {}
 
 func (x *DatabaseSchema) ProtoReflect() protoreflect.Message {
-	mi := &file_planpb_plan_proto_msgTypes[10]
+	mi := &file_planpb_plan_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -603,7 +761,7 @@ func (x *DatabaseSchema) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DatabaseSchema.ProtoReflect.Descriptor instead.
 func (*DatabaseSchema) Descriptor() ([]byte, []int) {
-	return file_planpb_plan_proto_rawDescGZIP(), []int{10}
+	return file_planpb_plan_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *DatabaseSchema) GetName() string {
@@ -624,7 +782,7 @@ type Release struct {
 
 func (x *Release) Reset() {
 	*x = Release{}
-	mi := &file_planpb_plan_proto_msgTypes[11]
+	mi := &file_planpb_plan_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -636,7 +794,7 @@ func (x *Release) String() string {
 func (*Release) ProtoMessage() {}
 
 func (x *Release) ProtoReflect() protoreflect.Message {
-	mi := &file_planpb_plan_proto_msgTypes[11]
+	mi := &file_planpb_plan_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -649,7 +807,7 @@ func (x *Release) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Release.ProtoReflect.Descriptor instead.
 func (*Release) Descriptor() ([]byte, []int) {
-	return file_planpb_plan_proto_rawDescGZIP(), []int{11}
+	return file_planpb_plan_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *Release) GetName() string {
@@ -677,30 +835,41 @@ var File_planpb_plan_proto protoreflect.FileDescriptor
 
 const file_planpb_plan_proto_rawDesc = "" +
 	"\n" +
-	"\x11planpb/plan.proto\x12\tmigration\"\xdb\x01\n" +
+	"\x11planpb/plan.proto\x12\tmigration\"\xde\x01\n" +
 	"\x04Plan\x12:\n" +
 	"\fapplications\x18\x01 \x03(\v2\x16.migration.ApplicationR\fapplications\x124\n" +
 	"\n" +
 	"interfaces\x18\x02 \x03(\v2\x14.migration.InterfaceR\n" +
-	"interfaces\x121\n" +
-	"\tdatabases\x18\x03 \x03(\v2\x13.migration.DatabaseR\tdatabases\x12.\n" +
-	"\breleases\x18\x04 \x03(\v2\x12.migration.ReleaseR\breleases\"N\n" +
+	"interfaces\x124\n" +
+	"\n" +
+	"datastores\x18\x03 \x03(\v2\x14.migration.DatastoreR\n" +
+	"datastores\x12.\n" +
+	"\breleases\x18\x04 \x03(\v2\x12.migration.ReleaseR\breleases\"p\n" +
 	"\vApplication\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12+\n" +
-	"\amodules\x18\x02 \x03(\v2\x11.migration.ModuleR\amodules\"N\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
+	"\vdescription\x18\x02 \x01(\tR\vdescription\x12+\n" +
+	"\amodules\x18\x03 \x03(\v2\x11.migration.ModuleR\amodules\"p\n" +
 	"\x06Module\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x120\n" +
-	"\tprocesses\x18\x02 \x03(\v2\x12.migration.ProcessR\tprocesses\"\xa2\x02\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
+	"\vdescription\x18\x02 \x01(\tR\vdescription\x120\n" +
+	"\tprocesses\x18\x03 \x03(\v2\x12.migration.ProcessR\tprocesses\"\xcd\x02\n" +
 	"\aProcess\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12'\n" +
-	"\x0fplanned_release\x18\x02 \x01(\tR\x0eplannedRelease\x12<\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
+	"\vdescription\x18\x02 \x01(\tR\vdescription\x12<\n" +
 	"\n" +
 	"interfaces\x18\x03 \x01(\v2\x1c.migration.ProcessInterfacesR\n" +
-	"interfaces\x12?\n" +
-	"\tdatabases\x18\x04 \x03(\v2!.migration.Process.DatabasesEntryR\tdatabases\x1a[\n" +
-	"\x0eDatabasesEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x123\n" +
-	"\x05value\x18\x02 \x01(\v2\x1d.migration.DatabaseConnectionR\x05value:\x028\x01\"\xd9\x02\n" +
+	"interfaces\x12B\n" +
+	"\n" +
+	"datastores\x18\x04 \x03(\v2\".migration.Process.DatastoresEntryR\n" +
+	"datastores\x12+\n" +
+	"\achanges\x18\x05 \x03(\v2\x11.migration.ChangeR\achanges\x1a]\n" +
+	"\x0fDatastoresEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x124\n" +
+	"\x05value\x18\x02 \x01(\v2\x1e.migration.DatastoreConnectionR\x05value:\x028\x01\"h\n" +
+	"\x06Change\x12\x12\n" +
+	"\x04type\x18\x01 \x01(\tR\x04type\x12'\n" +
+	"\x0fplanned_release\x18\x02 \x01(\tR\x0eplannedRelease\x12!\n" +
+	"\fplanned_date\x18\x03 \x01(\tR\vplannedDate\"\xd9\x02\n" +
 	"\x11ProcessInterfaces\x12F\n" +
 	"\bconsumed\x18\x01 \x03(\v2*.migration.ProcessInterfaces.ConsumedEntryR\bconsumed\x12F\n" +
 	"\bproduced\x18\x02 \x03(\v2*.migration.ProcessInterfaces.ProducedEntryR\bproduced\x1aY\n" +
@@ -715,17 +884,24 @@ const file_planpb_plan_proto_rawDesc = "" +
 	"\x11ProducedInterface\x12\x1e\n" +
 	"\n" +
 	"visibility\x18\x01 \x01(\tR\n" +
-	"visibility\"(\n" +
-	"\x12DatabaseConnection\x12\x12\n" +
-	"\x04mode\x18\x02 \x01(\tR\x04mode\"S\n" +
+	"visibility\")\n" +
+	"\x13DatastoreConnection\x12\x12\n" +
+	"\x04mode\x18\x02 \x01(\tR\x04mode\"u\n" +
 	"\tInterface\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1a\n" +
-	"\bprotocol\x18\x02 \x01(\tR\bprotocol\x12\x16\n" +
-	"\x06schema\x18\x03 \x01(\tR\x06schema\"o\n" +
-	"\bDatabase\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1a\n" +
-	"\blocation\x18\x02 \x01(\tR\blocation\x123\n" +
-	"\aschemas\x18\x03 \x03(\v2\x19.migration.DatabaseSchemaR\aschemas\"$\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
+	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x1a\n" +
+	"\bprotocol\x18\x03 \x01(\tR\bprotocol\x12\x16\n" +
+	"\x06schema\x18\x04 \x01(\tR\x06schema\"\xf8\x01\n" +
+	"\tDatastore\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12-\n" +
+	"\x04type\x18\x02 \x01(\x0e2\x19.migration.Datastore.TypeR\x04type\x12 \n" +
+	"\vdescription\x18\x03 \x01(\tR\vdescription\x12\x1a\n" +
+	"\blocation\x18\x04 \x01(\tR\blocation\x123\n" +
+	"\aschemas\x18\x05 \x03(\v2\x19.migration.DatabaseSchemaR\aschemas\"5\n" +
+	"\x04Type\x12\x14\n" +
+	"\x10UNSPECIFIED_TYPE\x10\x00\x12\f\n" +
+	"\bDATABASE\x10\x01\x12\t\n" +
+	"\x05CACHE\x10\x02\"$\n" +
 	"\x0eDatabaseSchema\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\"_\n" +
 	"\aRelease\x12\x12\n" +
@@ -747,44 +923,49 @@ func file_planpb_plan_proto_rawDescGZIP() []byte {
 	return file_planpb_plan_proto_rawDescData
 }
 
-var file_planpb_plan_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
+var file_planpb_plan_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_planpb_plan_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
 var file_planpb_plan_proto_goTypes = []any{
-	(*Plan)(nil),               // 0: migration.Plan
-	(*Application)(nil),        // 1: migration.Application
-	(*Module)(nil),             // 2: migration.Module
-	(*Process)(nil),            // 3: migration.Process
-	(*ProcessInterfaces)(nil),  // 4: migration.ProcessInterfaces
-	(*ConsumedInterface)(nil),  // 5: migration.ConsumedInterface
-	(*ProducedInterface)(nil),  // 6: migration.ProducedInterface
-	(*DatabaseConnection)(nil), // 7: migration.DatabaseConnection
-	(*Interface)(nil),          // 8: migration.Interface
-	(*Database)(nil),           // 9: migration.Database
-	(*DatabaseSchema)(nil),     // 10: migration.DatabaseSchema
-	(*Release)(nil),            // 11: migration.Release
-	nil,                        // 12: migration.Process.DatabasesEntry
-	nil,                        // 13: migration.ProcessInterfaces.ConsumedEntry
-	nil,                        // 14: migration.ProcessInterfaces.ProducedEntry
+	(Datastore_Type)(0),         // 0: migration.Datastore.Type
+	(*Plan)(nil),                // 1: migration.Plan
+	(*Application)(nil),         // 2: migration.Application
+	(*Module)(nil),              // 3: migration.Module
+	(*Process)(nil),             // 4: migration.Process
+	(*Change)(nil),              // 5: migration.Change
+	(*ProcessInterfaces)(nil),   // 6: migration.ProcessInterfaces
+	(*ConsumedInterface)(nil),   // 7: migration.ConsumedInterface
+	(*ProducedInterface)(nil),   // 8: migration.ProducedInterface
+	(*DatastoreConnection)(nil), // 9: migration.DatastoreConnection
+	(*Interface)(nil),           // 10: migration.Interface
+	(*Datastore)(nil),           // 11: migration.Datastore
+	(*DatabaseSchema)(nil),      // 12: migration.DatabaseSchema
+	(*Release)(nil),             // 13: migration.Release
+	nil,                         // 14: migration.Process.DatastoresEntry
+	nil,                         // 15: migration.ProcessInterfaces.ConsumedEntry
+	nil,                         // 16: migration.ProcessInterfaces.ProducedEntry
 }
 var file_planpb_plan_proto_depIdxs = []int32{
-	1,  // 0: migration.Plan.applications:type_name -> migration.Application
-	8,  // 1: migration.Plan.interfaces:type_name -> migration.Interface
-	9,  // 2: migration.Plan.databases:type_name -> migration.Database
-	11, // 3: migration.Plan.releases:type_name -> migration.Release
-	2,  // 4: migration.Application.modules:type_name -> migration.Module
-	3,  // 5: migration.Module.processes:type_name -> migration.Process
-	4,  // 6: migration.Process.interfaces:type_name -> migration.ProcessInterfaces
-	12, // 7: migration.Process.databases:type_name -> migration.Process.DatabasesEntry
-	13, // 8: migration.ProcessInterfaces.consumed:type_name -> migration.ProcessInterfaces.ConsumedEntry
-	14, // 9: migration.ProcessInterfaces.produced:type_name -> migration.ProcessInterfaces.ProducedEntry
-	10, // 10: migration.Database.schemas:type_name -> migration.DatabaseSchema
-	7,  // 11: migration.Process.DatabasesEntry.value:type_name -> migration.DatabaseConnection
-	5,  // 12: migration.ProcessInterfaces.ConsumedEntry.value:type_name -> migration.ConsumedInterface
-	6,  // 13: migration.ProcessInterfaces.ProducedEntry.value:type_name -> migration.ProducedInterface
-	14, // [14:14] is the sub-list for method output_type
-	14, // [14:14] is the sub-list for method input_type
-	14, // [14:14] is the sub-list for extension type_name
-	14, // [14:14] is the sub-list for extension extendee
-	0,  // [0:14] is the sub-list for field type_name
+	2,  // 0: migration.Plan.applications:type_name -> migration.Application
+	10, // 1: migration.Plan.interfaces:type_name -> migration.Interface
+	11, // 2: migration.Plan.datastores:type_name -> migration.Datastore
+	13, // 3: migration.Plan.releases:type_name -> migration.Release
+	3,  // 4: migration.Application.modules:type_name -> migration.Module
+	4,  // 5: migration.Module.processes:type_name -> migration.Process
+	6,  // 6: migration.Process.interfaces:type_name -> migration.ProcessInterfaces
+	14, // 7: migration.Process.datastores:type_name -> migration.Process.DatastoresEntry
+	5,  // 8: migration.Process.changes:type_name -> migration.Change
+	15, // 9: migration.ProcessInterfaces.consumed:type_name -> migration.ProcessInterfaces.ConsumedEntry
+	16, // 10: migration.ProcessInterfaces.produced:type_name -> migration.ProcessInterfaces.ProducedEntry
+	0,  // 11: migration.Datastore.type:type_name -> migration.Datastore.Type
+	12, // 12: migration.Datastore.schemas:type_name -> migration.DatabaseSchema
+	9,  // 13: migration.Process.DatastoresEntry.value:type_name -> migration.DatastoreConnection
+	7,  // 14: migration.ProcessInterfaces.ConsumedEntry.value:type_name -> migration.ConsumedInterface
+	8,  // 15: migration.ProcessInterfaces.ProducedEntry.value:type_name -> migration.ProducedInterface
+	16, // [16:16] is the sub-list for method output_type
+	16, // [16:16] is the sub-list for method input_type
+	16, // [16:16] is the sub-list for extension type_name
+	16, // [16:16] is the sub-list for extension extendee
+	0,  // [0:16] is the sub-list for field type_name
 }
 
 func init() { file_planpb_plan_proto_init() }
@@ -797,13 +978,14 @@ func file_planpb_plan_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_planpb_plan_proto_rawDesc), len(file_planpb_plan_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   15,
+			NumEnums:      1,
+			NumMessages:   16,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
 		GoTypes:           file_planpb_plan_proto_goTypes,
 		DependencyIndexes: file_planpb_plan_proto_depIdxs,
+		EnumInfos:         file_planpb_plan_proto_enumTypes,
 		MessageInfos:      file_planpb_plan_proto_msgTypes,
 	}.Build()
 	File_planpb_plan_proto = out.File

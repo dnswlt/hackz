@@ -7,25 +7,47 @@
                 "name": {
                     "type": "string"
                 },
-                "planned_release": {
+                "description": {
                     "type": "string"
                 },
                 "interfaces": {
                     "$ref": "#/definitions/migration.ProcessInterfaces",
                     "additionalProperties": true
                 },
-                "databases": {
+                "datastores": {
                     "additionalProperties": {
-                        "$ref": "#/definitions/migration.DatabaseConnection",
+                        "$ref": "#/definitions/migration.DatastoreConnection",
                         "additionalProperties": true
                     },
                     "type": "object"
+                },
+                "changes": {
+                    "items": {
+                        "$ref": "#/definitions/migration.Change"
+                    },
+                    "type": "array"
                 }
             },
             "additionalProperties": true,
             "type": "object",
             "title": "Process",
             "description": "ABB L4."
+        },
+        "migration.Change": {
+            "properties": {
+                "type": {
+                    "type": "string"
+                },
+                "planned_release": {
+                    "type": "string"
+                },
+                "planned_date": {
+                    "type": "string"
+                }
+            },
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Change"
         },
         "migration.ConsumedInterface": {
             "properties": {
@@ -37,7 +59,7 @@
             "type": "object",
             "title": "Consumed Interface"
         },
-        "migration.DatabaseConnection": {
+        "migration.DatastoreConnection": {
             "properties": {
                 "mode": {
                     "type": "string"
@@ -45,7 +67,7 @@
             },
             "additionalProperties": true,
             "type": "object",
-            "title": "Database Connection"
+            "title": "Datastore Connection"
         },
         "migration.ProcessInterfaces": {
             "properties": {

@@ -6,36 +6,44 @@ option go_package = "github.com/dnswlt/hackz/planr/planpb";
 
 // The top-level structure of the plan.yml file
 message Plan {
-  repeated Application applications = 1;
-  repeated Interface interfaces = 2;
-  repeated Database databases = 3;
-  repeated Release releases = 4;
+    repeated Application applications = 1;
+    repeated Interface interfaces = 2;
+    repeated Datastore datastores = 3;
+    repeated Release releases = 4;
 }
 
 // ABB L2.
 message Application {
-  string name = 1;
-  repeated Module modules = 2;
+    string name = 1;
+    string description = 2;
+    repeated Module modules = 3;
 }
 
 // ABB L3.
 message Module {
-  string name = 1;
-  repeated Process processes = 2;
+    string name = 1;
+    string description = 2;
+    repeated Process processes = 3;
 }
 
 // ABB L4.
 message Process {
-  string name = 1;
-  string planned_release = 2;
-  ProcessInterfaces interfaces = 3;
-  map<string, DatabaseConnection> databases = 4;
+    string name = 1;
+    string description = 2;
+    ProcessInterfaces interfaces = 3;
+    map<string, DatastoreConnection> datastores = 4;
+    repeated Change changes = 5;
 }
 
+message Change {
+    string type = 1;
+    string planned_release = 2;
+    string planned_date = 3;
+}
 
 message ProcessInterfaces {
-  map<string, ConsumedInterface> consumed = 1;
-  map<string, ProducedInterface> produced = 2;
+    map<string, ConsumedInterface> consumed = 1;
+    map<string, ProducedInterface> produced = 2;
 }
 
 message ConsumedInterface {
@@ -46,24 +54,33 @@ message ProducedInterface {
     string visibility = 1;
 }
 
-message DatabaseConnection {
-  string mode = 2;
+message DatastoreConnection {
+    string mode = 2;
 }
 
 message Interface {
-  string name = 1;
-  string protocol = 2;
-  string schema = 3;
+    string name = 1;
+    string description = 2;
+    string protocol = 3;
+    string schema = 4;
 }
 
-message Database {
-  string name = 1;
-  string location = 2;
-  repeated DatabaseSchema schemas = 3;
+message Datastore {
+    enum Type {
+        UNSPECIFIED_TYPE = 0;
+        DATABASE = 1;
+        CACHE = 2;
+    }
+    string name = 1;
+    Type type = 2;
+    string description = 3;
+    string location = 4;
+    // For databases only:
+    repeated DatabaseSchema schemas = 5;
 }
 
 message DatabaseSchema {
-  string name = 1;
+    string name = 1;
 }
 
 message Release {
