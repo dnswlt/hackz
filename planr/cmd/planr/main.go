@@ -37,7 +37,9 @@ func main() {
 		log.Println("Plan validated successfully.")
 	}
 
-	for i, app := range plan.GetApplications() {
-		fmt.Printf("Application #%d: %s\n", i, app.Name)
+	bs, err := yaml.Marshal(plan)
+	if err != nil {
+		log.Fatalf("Error marshaling YAML: %v", err)
 	}
+	fmt.Println(string(bs))
 }
