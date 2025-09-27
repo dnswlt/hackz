@@ -21,7 +21,7 @@ func main() {
 		log.Fatal("No YAML files specified.")
 	}
 
-	var plan planpb.Plan
+	var plans []*planpb.Plan
 
 	for _, planFile := range flag.Args() {
 		yamlFile, err := os.ReadFile(planFile)
@@ -30,30 +30,32 @@ func main() {
 		}
 
 		var p planpb.Plan
-		err = yaml.Unmarshal(yamlFile, &p)
+		err = yaml.UnmarshalStrict(yamlFile, &p)
 		if err != nil {
 			log.Fatalf("Error unmarshaling YAML: %v", err)
 		}
-
-		plan.Applications = append(plan.Applications, p.Applications...)
-		plan.Datastores = append(plan.Datastores, p.Datastores...)
-		plan.Interfaces = append(plan.Interfaces, p.Interfaces...)
-		plan.Releases = append(plan.Releases, p.Releases...)
+		plans = append(plans, &p)
 	}
 
-	fmt.Printf("Read %d applications from %d files\n", len(plan.GetApplications()), len(flag.Args()))
+	plan, err := planr.MergePlans(plans)
+	if err != nil {
+		log.Fatalf("Could not merge plans: %v", err)
+	}
+	fmt.Printf("Read %d processes from %d files\n", len(plan.GetProcesses()), len(flag.Args()))
 
-	if err := planr.ValidatePlan(&plan); err != nil {
+	if err := planr.ValidatePlan(plan); err != nil {
 		log.Fatalf("Plan validation failed: %v", err)
 	} else {
 		log.Println("Plan validated successfully.")
 	}
 
 	if *printYaml {
-		bs, err := yaml.Marshal(&plan)
+		bs, err := yaml.Marshal(plan.Proto())
 		if err != nil {
 			log.Fatalf("Error marshaling YAML: %v", err)
 		}
 		fmt.Println(string(bs))
 	}
+
+	planr.PrintTimeline(plan, "halon-migration")
 }

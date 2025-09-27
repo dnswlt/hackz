@@ -23,16 +23,19 @@ message Application {
 message Module {
     string name = 1;
     string description = 2;
-    repeated Process processes = 3;
+    repeated string contacts = 3;
+    repeated Process processes = 4;
 }
 
 // ABB L4.
 message Process {
     string name = 1;
     string description = 2;
-    ProcessInterfaces interfaces = 3;
-    map<string, DatastoreConnection> datastores = 4;
-    repeated Change changes = 5;
+    repeated string contacts = 3;
+    repeated string variants = 4;
+    ProcessInterfaces interfaces = 5;
+    map<string, DatastoreConnection> datastores = 6;
+    map<string, Change> changes = 7;
 }
 
 message Change {
@@ -47,7 +50,7 @@ message ProcessInterfaces {
 }
 
 message ConsumedInterface {
-    string producer = 1;
+    repeated string producers = 1;
 }
 
 message ProducedInterface {

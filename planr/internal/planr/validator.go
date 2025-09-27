@@ -100,17 +100,18 @@ func ValidateReleases(plan *planpb.Plan) error {
 	return nil
 }
 
-func ValidatePlan(plan *planpb.Plan) error {
-	if err := ValidateInterfaces(plan); err != nil {
+func ValidatePlan(plan *Plan) error {
+	p := plan.plan
+	if err := ValidateInterfaces(p); err != nil {
 		return err
 	}
-	if err := ValidateDatastores(plan); err != nil {
+	if err := ValidateDatastores(p); err != nil {
 		return err
 	}
-	if err := ValidateReleases(plan); err != nil {
+	if err := ValidateReleases(p); err != nil {
 		return err
 	}
-	if err := ValidateProcesses(plan); err != nil {
+	if err := ValidateProcesses(p); err != nil {
 		return err
 	}
 	return nil
