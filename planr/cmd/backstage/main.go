@@ -7,11 +7,14 @@ import (
 	"os"
 
 	"github.com/dnswlt/hackz/planr/internal/backstage"
+	"github.com/dnswlt/hackz/planr/internal/web"
 )
 
 func main() {
 
 	svgFlag := flag.String("svg", "", "Component to render an SVG for")
+	serverAddrFlag := flag.String("addr", "localhost:8080", "Address to listen on")
+	baseDir := flag.String("base-dir", ".", "Base directory")
 	flag.Parse()
 
 	repo := backstage.NewRepository()
@@ -33,6 +36,20 @@ func main() {
 
 	if err := repo.Validate(); err != nil {
 		log.Fatalf("Repository validation failed: %v", err)
+	}
+
+	if *serverAddrFlag != "" {
+		server, err := web.NewServer(
+			web.ServerOptions{
+				Addr:    *serverAddrFlag,
+				BaseDir: *baseDir,
+			},
+			repo,
+		)
+		if err != nil {
+			log.Fatalf("Could not create server: %v", err)
+		}
+		log.Fatal(server.Serve()) // Never returns
 	}
 
 	if *svgFlag != "" {

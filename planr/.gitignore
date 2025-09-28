@@ -1,2 +1,3 @@
 *.svg
 resources/
+web/node_modules/
