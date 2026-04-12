@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Canvas 2D Performance Test</title>
+    <style>
+        /* Basic reset to make canvas fill the screen */
+        body, html {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #000;
+        }
+        canvas {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="renderCanvas"></canvas>
+
+    <script>
+        // --- Setup ---
+        const canvas = document.getElementById('renderCanvas');
+        const ctx = canvas.getContext('2d');
+
+        let polygons = [];
+        const NUM_POLYGONS = 500;
+        const MIN_SPEED = 0.5;
+        const MAX_SPEED = 2.0;
+        const MIN_ROTATION = -0.01;
+        const MAX_ROTATION = 0.01;
+        const MIN_RADIUS = 20;
+        const MAX_RADIUS = 50;
+
+        // --- FPS Counter ---
+        let lastTimestamp = 0;
+        let frameCount = 0;
+        let displayedFps = 0;
+
+        // --- Utility Functions ---
+
+        /**
+         * Generates a random number between min and max.
+         */
+        function random(min, max) {
+            return Math.random() * (max - min) + min;
+        }
+
+        /**
+         * Creates a single polygon object.
+         */
+        function createRandomPolygon() {
+            const x = random(MAX_RADIUS, window.innerWidth - MAX_RADIUS);
+            const y = random(MAX_RADIUS, window.innerHeight - MAX_RADIUS);
+            const numVertices = Math.floor(random(3, 9)); // 3 to 8 vertices
+            const radius = random(MIN_RADIUS, MAX_RADIUS);
+            
+            const points = [];
+            for (let i = 0; i < numVertices; i++) {
+                // Generate points by angle to ensure a simple (non-intersecting) polygon
+                const angle = (i / numVertices) * Math.PI * 2;
+                // Randomize radius for each vertex to create irregular shapes
+                const r = radius * random(0.7, 1.3);
+                points.push({
+                    x: Math.cos(angle) * r,
+                    y: Math.sin(angle) * r
+                });
+            }
+
+            return {
+                x: x,
+                y: y,
+                dx: random(MIN_SPEED, MAX_SPEED) * (Math.random() > 0.5 ? 1 : -1),
+                dy: random(MIN_SPEED, MAX_SPEED) * (Math.random() > 0.5 ? 1 : -1),
+                rotation: 0,
+                dRotation: random(MIN_ROTATION, MAX_ROTATION),
+                points: points,
+                color: `hsl(${random(0, 360)}, 70%, 50%)`,
+                radius: radius // Used for simple bounce detection
+            };
+        }
+
+        // --- App Logic ---
+
+        /**
+         * Initializes the canvas and creates polygons.
+         */
+        function setup() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+
+            polygons = [];
+            for (let i = 0; i < NUM_POLYGONS; i++) {
+                polygons.push(createRandomPolygon());
+            }
+
+            // Handle window resizing
+            window.addEventListener('resize', () => {
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
+                // On resize, we just let them continue.
+                // In a real app, you might re-initialize or clamp positions.
+            });
+        }
+
+        /**
+         * Updates the state of all polygons (movement, bouncing).
+         */
+        function update() {
+            for (const poly of polygons) {
+                // Update position
+                poly.x += poly.dx;
+                poly.y += poly.dy;
+                poly.rotation += poly.dRotation;
+
+                // Bounce detection
+                if (poly.x - poly.radius < 0 || poly.x + poly.radius > canvas.width) {
+                    poly.dx *= -1;
+                    // Clamp position to prevent getting stuck
+                    poly.x = Math.max(poly.radius, Math.min(poly.x, canvas.width - poly.radius));
+                }
+                if (poly.y - poly.radius < 0 || poly.y + poly.radius > canvas.height) {
+                    poly.dy *= -1;
+                    poly.y = Math.max(poly.radius, Math.min(poly.y, canvas.height - poly.radius));
+                }
+            }
+        }
+
+        /**
+         * Renders all polygons to the canvas.
+         */
+        function render() {
+            // Clear canvas with a dark background
+            ctx.fillStyle = '#111';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            for (const poly of polygons) {
+                ctx.save();
+                
+                // Move to the polygon's center and rotate
+                ctx.translate(poly.x, poly.y);
+                ctx.rotate(poly.rotation);
+                
+                // Set styles
+                ctx.fillStyle = poly.color;
+                ctx.strokeStyle = '#FFF'; // White outline for clarity
+                ctx.lineWidth = 1;
+
+                // Draw the polygon path
+                ctx.beginPath();
+                ctx.moveTo(poly.points[0].x, poly.points[0].y);
+                for (let i = 1; i < poly.points.length; i++) {
+                    ctx.lineTo(poly.points[i].x, poly.points[i].y);
+                }
+                ctx.closePath();
+                
+                // Fill and stroke
+                ctx.fill();
+                ctx.stroke();
+                
+                ctx.restore();
+            }
+
+            // --- Draw FPS ---
+            ctx.save();
+            ctx.font = '18px Arial';
+            ctx.fillStyle = '#00FF00'; // Bright Green
+            ctx.textAlign = 'right';
+            ctx.textBaseline = 'bottom';
+            ctx.fillText(`FPS: ${displayedFps}`, canvas.width - 15, canvas.height - 15);
+            ctx.restore();
+        }
+
+        /**
+         * The main animation loop.
+         */
+        function loop(timestamp) {
+            // Calculate FPS
+            // Use timestamp from requestAnimationFrame
+            if (lastTimestamp === 0) {
+                lastTimestamp = timestamp;
+            }
+
+            frameCount++;
+            const elapsed = timestamp - lastTimestamp;
+
+            if (elapsed >= 1000) { // Update FPS display every 1 second
+                displayedFps = frameCount;
+                frameCount = 0;
+                lastTimestamp = timestamp;
+            }
+
+            update();
+            render();
+            requestAnimationFrame(loop);
+        }
+
+        // --- Start ---
+        setup();
+        // Start the loop using requestAnimationFrame to get the initial timestamp
+        requestAnimationFrame(loop);
+
+    </script>
+</body>
+</html>
