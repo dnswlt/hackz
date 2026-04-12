@@ -254,9 +254,97 @@ func cmdJSON(ctx context.Context) error {
 	return rows.Err()
 }
 
+func cmdTxn(ctx context.Context) error {
+	// No busy_timeout: we want conflicts to surface immediately, not be retried.
+	db := sql.OpenDB(&sqliteConnector{
+		dsn:     "txn.db",
+		pragmas: []string{`PRAGMA journal_mode=WAL`},
+	})
+	defer db.Close()
+
+	_, err := db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS accounts (
+		id      INTEGER PRIMARY KEY,
+		name    TEXT    NOT NULL,
+		balance INTEGER NOT NULL
+	)`)
+	if err != nil {
+		return fmt.Errorf("create table: %w", err)
+	}
+	_, err = db.ExecContext(ctx, `INSERT OR REPLACE INTO accounts VALUES (1, 'alice', 0)`)
+	if err != nil {
+		return fmt.Errorf("seed: %w", err)
+	}
+
+	// Two connections = two independent transaction snapshots.
+	conn1, err := db.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn1.Close()
+	conn2, err := db.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn2.Close()
+
+	// Open both transactions before either writes, so they share the same
+	// snapshot of the DB. *sql.Tx is not goroutine-bound; we drive both from
+	// here sequentially.
+	tx1, err := conn1.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("tx1 begin: %w", err)
+	}
+	tx2, err := conn2.BeginTx(ctx, nil)
+	if err != nil {
+		tx1.Rollback()
+		return fmt.Errorf("tx2 begin: %w", err)
+	}
+
+	var bal1, bal2 int
+	if err := tx1.QueryRowContext(ctx, `SELECT balance FROM accounts WHERE id=1`).Scan(&bal1); err != nil {
+		tx1.Rollback(); tx2.Rollback()
+		return fmt.Errorf("tx1 read: %w", err)
+	}
+	if err := tx2.QueryRowContext(ctx, `SELECT balance FROM accounts WHERE id=1`).Scan(&bal2); err != nil {
+		tx1.Rollback(); tx2.Rollback()
+		return fmt.Errorf("tx2 read: %w", err)
+	}
+	fmt.Printf("tx1 read balance=%d\n", bal1)
+	fmt.Printf("tx2 read balance=%d\n", bal2)
+
+	// tx1 writes and commits first.
+	if _, err := tx1.ExecContext(ctx, `UPDATE accounts SET balance=? WHERE id=1`, bal1+100); err != nil {
+		tx1.Rollback(); tx2.Rollback()
+		return fmt.Errorf("tx1 write: %w", err)
+	}
+	if err := tx1.Commit(); err != nil {
+		tx1.Rollback(); tx2.Rollback()
+		return fmt.Errorf("tx1 commit: %w", err)
+	}
+	fmt.Println("tx1 committed balance+100")
+
+	// tx2 now tries to write against its stale snapshot.
+	if _, err := tx2.ExecContext(ctx, `UPDATE accounts SET balance=? WHERE id=1`, bal2+200); err != nil {
+		tx2.Rollback()
+		fmt.Printf("tx2 write failed (expected): %v\n", err)
+	} else if err := tx2.Commit(); err != nil {
+		tx2.Rollback()
+		fmt.Printf("tx2 commit failed (expected): %v\n", err)
+	} else {
+		fmt.Println("tx2 committed (no conflict detected — lost update!)")
+	}
+
+	var final int
+	if err := db.QueryRowContext(ctx, `SELECT balance FROM accounts WHERE id=1`).Scan(&final); err != nil {
+		return err
+	}
+	fmt.Printf("final balance=%d (expected 100 if G1 won)\n", final)
+	return nil
+}
+
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintf(os.Stderr, "usage: gosql <command>\n\nCommands:\n  hello       create hello.db, insert greetings, and print them\n  concurrent  10 goroutines write concurrently to concurrent.db\n  json        store and retrieve structured objects as JSON columns\n")
+		fmt.Fprintf(os.Stderr, "usage: gosql <command>\n\nCommands:\n  hello       create hello.db, insert greetings, and print them\n  concurrent  10 goroutines write concurrently to concurrent.db\n  json        store and retrieve structured objects as JSON columns\n  txn         two goroutines write the same row; observe the conflict\n")
 		os.Exit(1)
 	}
 
@@ -269,6 +357,8 @@ func main() {
 		err = cmdConcurrent(ctx)
 	case "json":
 		err = cmdJSON(ctx)
+	case "txn":
+		err = cmdTxn(ctx)
 	default:
 		fmt.Fprintf(os.Stderr, "unknown command: %q\n", os.Args[1])
 		os.Exit(1)
